@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ScoreEntry, Singer } from '../types.ts'
 import { scoreGrade, SCORING_DISCLAIMER, starsForScore } from '../lib/scoring.ts'
-import { getSongById } from '../data/songs.ts'
 import { useRoom } from '../state/useRoom.ts'
+import { useMediaLibrary } from '../state/useMediaLibrary.ts'
 
 interface Row {
   singer: Singer
@@ -113,6 +113,7 @@ function AnimatedScore({ value }: { value: number }) {
 
 export function ScorePanel({ score }: { score: ScoreEntry | null }) {
   const { room } = useRoom()
+  const { getSong } = useMediaLibrary()
 
   if (!score) {
     return (
@@ -126,7 +127,7 @@ export function ScorePanel({ score }: { score: ScoreEntry | null }) {
     )
   }
 
-  const song = getSongById(score.songId)
+  const song = getSong(score.songId)
   const singer = room?.singers.find((s) => s.id === score.singerId) ?? null
   const stars = starsForScore(score.value)
 

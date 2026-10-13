@@ -28,6 +28,19 @@ export interface Song {
   youtubeId: string
   /** Video duration in seconds, when known. Optional. */
   durationSec?: number
+  /**
+   * Where the entry comes from: the shipped demo catalog ('demo') or a folder
+   * in the local `Songs/` library ('folder'). Defaults to 'demo' when absent.
+   */
+  source?: 'demo' | 'folder'
+  /**
+   * A same-origin URL the browser can play directly (set for `Songs/` folder
+   * entries served by the offline server). When present the player streams this
+   * file instead of embedding YouTube.
+   */
+  mediaUrl?: string
+  /** Poster image URL for a folder song, when one was found. Optional. */
+  coverUrl?: string
 }
 
 /** A per-device identity. Guest identities are always provider 'local'. */

@@ -3,6 +3,7 @@ import { AppHeader } from './components/AppHeader.tsx'
 import { HomePage } from './pages/HomePage.tsx'
 import { RoomPage } from './pages/RoomPage.tsx'
 import { AuthProvider } from './state/AuthProvider.tsx'
+import { MediaLibraryProvider } from './state/MediaLibraryProvider.tsx'
 import { RoomProvider } from './state/RoomProvider.tsx'
 import { VideoLibraryProvider } from './state/VideoLibraryProvider.tsx'
 
@@ -25,20 +26,22 @@ function NotFound() {
 export default function App() {
   return (
     <AuthProvider>
-      <VideoLibraryProvider>
-        <RoomProvider>
-          <BrowserRouter>
-            <AppHeader />
-            <main className="app-main">
-              <Routes>
-                <Route path="/" element={<HomePage />} />
-                <Route path="/room/:code" element={<RoomPage />} />
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </main>
-          </BrowserRouter>
-        </RoomProvider>
-      </VideoLibraryProvider>
+      <MediaLibraryProvider>
+        <VideoLibraryProvider>
+          <RoomProvider>
+            <BrowserRouter>
+              <AppHeader />
+              <main className="app-main">
+                <Routes>
+                  <Route path="/" element={<HomePage />} />
+                  <Route path="/room/:code" element={<RoomPage />} />
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </main>
+            </BrowserRouter>
+          </RoomProvider>
+        </VideoLibraryProvider>
+      </MediaLibraryProvider>
     </AuthProvider>
   )
 }

@@ -1,17 +1,18 @@
-import { getSongById } from '../data/songs.ts'
 import { useRoom } from '../state/useRoom.ts'
 import { useVideoLibrary } from '../state/useVideoLibrary.ts'
-import { YouTubePlayer } from './YouTubePlayer.tsx'
+import { useMediaLibrary } from '../state/useMediaLibrary.ts'
+import { MediaPlayer } from './MediaPlayer.tsx'
 import { ScorePanel } from './Leaderboard.tsx'
 
 export function NowSingingPanel() {
   const { room, startNext, endSong, skipCurrent } = useRoom()
   const { resolveVideoId } = useVideoLibrary()
+  const { getSong } = useMediaLibrary()
 
   if (!room) return null
 
   const current = room.queue.find((item) => item.status === 'singing') ?? null
-  const song = current ? (getSongById(current.songId) ?? null) : null
+  const song = current ? (getSong(current.songId) ?? null) : null
   const singer = current
     ? (room.singers.find((candidate) => candidate.id === current.singerId) ?? null)
     : null
@@ -34,7 +35,7 @@ export function NowSingingPanel() {
 
       {song ? (
         <>
-          <YouTubePlayer
+          <MediaPlayer
             song={song}
             videoId={resolveVideoId(song)}
             variant="room"

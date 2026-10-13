@@ -92,11 +92,21 @@ export async function scanSongsRoot(songsRoot) {
 
     let title = entry.name
     let artist = ''
+    let language = ''
+    let genre = ''
+    let tags = []
+    let youtubeId = ''
     try {
       const meta = JSON.parse(await readFile(path.join(dir, 'meta.json'), 'utf8'))
       if (meta && typeof meta === 'object') {
         if (typeof meta.title === 'string' && meta.title.trim()) title = meta.title.trim()
         if (typeof meta.artist === 'string' && meta.artist.trim()) artist = meta.artist.trim()
+        if (typeof meta.language === 'string' && meta.language.trim()) language = meta.language.trim()
+        if (typeof meta.genre === 'string' && meta.genre.trim()) genre = meta.genre.trim()
+        if (Array.isArray(meta.tags)) {
+          tags = meta.tags.filter((tag) => typeof tag === 'string' && tag.trim()).map((tag) => tag.trim())
+        }
+        if (typeof meta.youtubeId === 'string' && meta.youtubeId.trim()) youtubeId = meta.youtubeId.trim()
       }
     } catch {
       const guess = splitTitleArtist(entry.name)
@@ -110,6 +120,10 @@ export async function scanSongsRoot(songsRoot) {
       id: slugify(entry.name),
       title,
       artist,
+      language,
+      genre,
+      tags,
+      youtubeId,
       folder: entry.name,
       videoUrl: `/${encoded}/${videoFile}`,
       coverUrl: coverFile ? `/${encoded}/${coverFile}` : null,

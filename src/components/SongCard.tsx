@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import type { Song } from '../types.ts'
 import { useVideoLibrary } from '../state/useVideoLibrary.ts'
-import { YouTubePlayer } from './YouTubePlayer.tsx'
+import { useMediaLibrary } from '../state/useMediaLibrary.ts'
+import { MediaPlayer } from './MediaPlayer.tsx'
 
 interface SongCardProps {
   song: Song
@@ -17,9 +18,19 @@ export function SongCard({
   addLabel = 'Add to queue',
 }: SongCardProps) {
   const { resolveVideoId, hasOverride } = useVideoLibrary()
+  const { sourceKind } = useMediaLibrary()
   const [previewing, setPreviewing] = useState(false)
   const videoId = resolveVideoId(song)
-  const videoReady = videoId !== ''
+  const kind = sourceKind(song)
+
+  const badge =
+    kind === 'file'
+      ? { label: 'Local file', ok: true }
+      : kind === 'folder'
+        ? { label: 'Songs folder', ok: true }
+        : kind === 'youtube'
+          ? { label: hasOverride(song.id) ? 'Video set' : 'Video ready', ok: true }
+          : { label: 'No video id', ok: false }
 
   return (
     <article className="song-card">
@@ -28,8 +39,8 @@ export function SongCard({
           <h3 className="song-card__title">{song.title}</h3>
           <p className="song-card__artist">{song.artist}</p>
         </div>
-        <span className={`badge${videoReady ? ' badge--ok' : ' badge--muted'}`}>
-          {videoReady ? (hasOverride(song.id) ? 'Video set' : 'Video ready') : 'No video id'}
+        <span className={`badge${badge.ok ? ' badge--ok' : ' badge--muted'}`}>
+          {badge.label}
         </span>
       </div>
 
@@ -68,7 +79,7 @@ export function SongCard({
         </button>
       </div>
 
-      {previewing && <YouTubePlayer song={song} videoId={videoId} />}
+      {previewing && <MediaPlayer song={song} videoId={videoId} />}
     </article>
   )
 }

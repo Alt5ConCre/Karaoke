@@ -37,6 +37,11 @@ self.addEventListener('fetch', (event) => {
   }
   if (url.origin !== self.location.origin) return
 
+  // The local library routes are live data served by the offline server:
+  // `/api/songs` changes as folders are added, and `/songs/*` can be huge
+  // media files we must not hoard in the cache. Let the network handle both.
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/songs/')) return
+
   if (req.mode === 'navigate') {
     event.respondWith(
       fetch(req)

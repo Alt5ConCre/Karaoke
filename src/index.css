@@ -819,6 +819,66 @@ a {
   gap: 8px;
 }
 
+/* ------------------------------------------------ on-device / local library */
+
+.player--local .player__frame {
+  background: #000;
+}
+
+.player__video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: #000;
+}
+
+.player__frame--loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.player__loading {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.add-media {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  min-width: 0;
+}
+
+.add-media__label {
+  font-size: 0.76rem;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+
+.add-media__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.add-media__input {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 0.8rem;
+}
+
+.add-media__saved {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
 /* ------------------------------------------------------------- room pages */
 
 .room-loading,

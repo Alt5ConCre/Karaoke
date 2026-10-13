@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { Song } from '../types.ts'
-import { SONGS } from '../data/songs.ts'
+import { useMediaLibrary } from '../state/useMediaLibrary.ts'
 import { SongCard } from './SongCard.tsx'
 
 type LanguageFilter = 'All' | Song['language']
@@ -27,15 +27,16 @@ interface SongBrowserProps {
 }
 
 export function SongBrowser({ onAdd, addDisabled, addLabel, heading }: SongBrowserProps) {
+  const { catalog } = useMediaLibrary()
   const [query, setQuery] = useState('')
   const [language, setLanguage] = useState<LanguageFilter>('All')
 
   const results = useMemo(
     () =>
-      SONGS.filter((song) => language === 'All' || song.language === language).filter((song) =>
-        matchesQuery(song, query),
-      ),
-    [query, language],
+      catalog
+        .filter((song) => language === 'All' || song.language === language)
+        .filter((song) => matchesQuery(song, query)),
+    [catalog, query, language],
   )
 
   return (

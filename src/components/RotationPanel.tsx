@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
-import { getSongById } from '../data/songs.ts'
 import { joinOrder, upcomingBySinger } from '../lib/rotation.ts'
 import { useRoom } from '../state/useRoom.ts'
+import { useMediaLibrary } from '../state/useMediaLibrary.ts'
 import type { Singer } from '../types.ts'
 
 function SingerChip({ singer, size = 26 }: { singer: Singer; size?: number }) {
@@ -98,6 +98,7 @@ export function RotationPanel() {
 
 export function QueuePanel() {
   const { room, me, removeWaiting, clearWaiting, endSong, skipCurrent, startNext } = useRoom()
+  const { getSong } = useMediaLibrary()
 
   if (!room) return null
 
@@ -141,7 +142,7 @@ export function QueuePanel() {
       {singing && (
         <div className="queue-now">
           <span className="badge badge--live">now singing</span>
-          <strong>{getSongById(singing.songId)?.title ?? 'Unknown song'}</strong>
+          <strong>{getSong(singing.songId)?.title ?? 'Unknown song'}</strong>
           <span className="queue-now__singer">
             {room.singers.find((singer) => singer.id === singing.singerId)?.name}
           </span>
@@ -154,7 +155,7 @@ export function QueuePanel() {
       ) : (
         <ol className="queue-list">
           {waiting.map((item, index) => {
-            const song = getSongById(item.songId)
+            const song = getSong(item.songId)
             const singer = room.singers.find((candidate) => candidate.id === item.singerId)
             return (
               <li key={item.id} className="queue-row">
