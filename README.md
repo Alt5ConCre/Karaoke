@@ -19,14 +19,16 @@ permanent demo banner.
 | Queue, singer rotation, room codes | **Working** |
 | Leaderboard UI and rules | **Working** |
 | Karaoke playback | **Working *only once you attach a permitted YouTube id*** (see below) |
-| Singing scores | **SIMULATED** — a deterministic pseudo-random number for demoing the board |
+| Singing scores | **FUN SIMULATION** — a fresh random whole number from 65 to 100 for every finished song |
 
-> **Scores are not measurements.** `simulateScore()` never listens to a
+> **Scores are not measurements.** `generateFunScore()` never listens to a
 > microphone, never analyses pitch, and has nothing to do with how well anyone
-> sang. Every score is stored with `simulated: true` and shown as a demo score.
-> Real scoring needs microphone pitch analysis (onset detection, F0 tracking,
-> comparison to a reference melody, timing) — that is a deliberate later step, not
-> something this MVP pretends to do. See `src/lib/scoring.ts`.
+> sang — it draws a new random whole number between 65 and 100 for each song that
+> finishes, purely to make the board fun at a party. Every score is stored with
+> `simulated: true` and labelled a fun random score. Real scoring needs microphone
+> pitch analysis (onset detection, F0 tracking, comparison to a reference melody,
+> timing) — that is a deliberate later step, not something this MVP pretends to do.
+> See `src/lib/scoring.ts`.
 
 ### Why the catalog ships without video ids
 
@@ -65,6 +67,20 @@ npm run lint     # oxlint
 3. Add songs on both tabs, then **Start next** / **End & score**. Both tabs update
    live.
 
+### Install it as an app (PWA)
+
+The production build ships a web app manifest and a service worker
+(`public/sw.js`), so it can be **installed** and opened **offline**:
+
+- Install: open the deployed site and use the browser's “Install app” / “Add to
+  Home Screen”.
+- Offline: the app shell is cached. Navigations go network-first (a new deploy is
+  picked up automatically) and fall back to the cached shell when offline;
+  same-origin assets are cache-first. Cross-origin requests (the YouTube player)
+  always pass through and are never cached.
+- The service worker registers **only in the production build** and is a pure
+  enhancement — if it cannot register, the app still runs.
+
 ---
 
 ## How rooms sync
@@ -86,7 +102,8 @@ The header always shows which transport is live, so it is never ambiguous.
 
 ## Enabling Supabase (cross-device rooms)
 
-1. Install the client:
+1. Install the client (already a dependency of this project — only needed if you
+   removed it):
 
    ```bash
    npm install @supabase/supabase-js

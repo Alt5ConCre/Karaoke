@@ -79,16 +79,16 @@ export async function createSupabaseAdapter(): Promise<RoomSyncAdapter | null> {
 
   let createClient: ((u: string, k: string) => SupabaseClientLike) | undefined
   try {
-    // Non-literal specifier + @vite-ignore: the package is optional and must not
-    // be resolved by the bundler unless the operator actually installed it.
-    const specifier = '@supabase/supabase-js'
-    const mod = (await import(/* @vite-ignore */ specifier)) as {
+    // Literal specifier so the bundler resolves and code-splits the client into
+    // its own chunk. That chunk is fetched lazily and only when the app is
+    // actually Supabase-configured, so an unconfigured build never loads it.
+    const mod = (await import('@supabase/supabase-js')) as unknown as {
       createClient?: (u: string, k: string) => SupabaseClientLike
     }
     createClient = mod.createClient
   } catch {
     console.warn(
-      '[videoke] Supabase env vars are set but @supabase/supabase-js is not installed.\n' +
+      '[videoke] Supabase env vars are set but @supabase/supabase-js could not be loaded.\n' +
         '          Run `npm install @supabase/supabase-js` to enable shared rooms.',
     )
     return null
