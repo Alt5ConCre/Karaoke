@@ -19,8 +19,8 @@ const MODES: Array<{ id: Mode; label: string }> = [
   { id: 'paste', label: 'Paste a list' },
 ]
 
-/** Cap a single bulk action so we never try to write hundreds of files at once. */
-const MAX_BULK = 100
+/** Cap a single bulk action so we never try to write thousands of files at once. */
+const MAX_BULK = 5000
 
 type Entry = { song: CustomSong; file?: File }
 

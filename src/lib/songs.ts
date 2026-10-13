@@ -7,8 +7,8 @@
  */
 
 /**
- * Split a folder/file name into title + artist. Convention: "Anak - Freddie
- * Aguilar" → title "Anak", artist "Freddie Aguilar". A meta.json always wins
+ * Split a folder/file name into artist + title. Convention: "Freddie Aguilar -
+ * Anak" → artist "Freddie Aguilar", title "Anak". A meta.json always wins
  * over this guess.
  */
 export function splitTitleArtist(name: string): { title: string; artist: string } {
@@ -21,7 +21,7 @@ export function splitTitleArtist(name: string): { title: string; artist: string 
     .map((part) => part.trim())
     .filter(Boolean)
   if (parts.length >= 2) {
-    return { title: parts[0] as string, artist: parts.slice(1).join(' - ') }
+    return { artist: parts[0] as string, title: parts.slice(1).join(' - ') }
   }
   return { title: cleaned, artist: 'Unknown artist' }
 }
