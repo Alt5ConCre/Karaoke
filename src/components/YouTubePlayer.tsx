@@ -10,6 +10,10 @@ interface YouTubePlayerProps {
   heading?: string
   /** Size variant of the frame. */
   variant?: 'room' | 'card'
+  /** Called when the embed reports the video finished (best effort). */
+  onEnded?: () => void
+  /** Start playing automatically (used when auto-advancing). */
+  autoPlay?: boolean
 }
 
 /** How long we wait for the embed to report itself ready before hinting. */
@@ -30,17 +34,31 @@ type Phase = 'loading' | 'ready' | 'error'
  * restriction; we just link out to the video's real watch page and let the
  * operator attach a different permitted id.
  */
-export function YouTubePlayer({ song, videoId, heading, variant = 'card' }: YouTubePlayerProps) {
+export function YouTubePlayer({
+  song,
+  videoId,
+  heading,
+  variant = 'card',
+  onEnded,
+  autoPlay,
+}: YouTubePlayerProps) {
   const frameRef = useRef<HTMLIFrameElement | null>(null)
   const [phase, setPhase] = useState<Phase>('loading')
   const [errorCode, setErrorCode] = useState<number | null>(null)
   const [slow, setSlow] = useState(false)
   const [loadedFor, setLoadedFor] = useState(videoId)
+  const endedRef = useRef(false)
+  const onEndedRef = useRef(onEnded)
+
+  // Keep the latest callback without re-subscribing the message listener.
+  useEffect(() => {
+    onEndedRef.current = onEnded
+  })
 
   const src = useMemo(() => {
     const origin = typeof window !== 'undefined' ? window.location.origin : ''
-    return videoId ? buildEmbedUrl(videoId, origin) : ''
-  }, [videoId])
+    return videoId ? buildEmbedUrl(videoId, origin, autoPlay) : ''
+  }, [videoId, autoPlay])
 
   // A new video resets the detection state. Adjusting during render (rather than
   // in an effect) avoids a second cascading render pass.
@@ -51,10 +69,13 @@ export function YouTubePlayer({ song, videoId, heading, variant = 'card' }: YouT
     setSlow(false)
   }
 
-  // The embed posts messages (onReady / onError) once enablejsapi is on. We
-  // only trust messages that actually come from this frame's window.
+  // The embed posts messages (onReady / onError / onStateChange) once
+  // enablejsapi is on. We only trust messages that actually come from this
+  // frame's window. We also subscribe to the feed ourselves so the player
+  // reports state changes at all.
   useEffect(() => {
     if (!videoId) return
+    endedRef.current = false
 
     function onMessage(event: MessageEvent) {
       const frame = frameRef.current
@@ -80,6 +101,14 @@ export function YouTubePlayer({ song, videoId, heading, variant = 'card' }: YouT
         if (typeof data.info === 'number') setErrorCode(data.info)
         return
       }
+      if (data.event === 'onStateChange') {
+        // info 0 === ended. Fire the hook at most once per video.
+        if (data.info === 0 && !endedRef.current) {
+          endedRef.current = true
+          onEndedRef.current?.()
+        }
+        return
+      }
       const info = data.info as { errorCode?: unknown } | undefined
       if (info && typeof info.errorCode === 'number' && info.errorCode > 0) {
         setPhase('error')
@@ -87,9 +116,29 @@ export function YouTubePlayer({ song, videoId, heading, variant = 'card' }: YouT
       }
     }
 
+    const sendListening = () => {
+      const frame = frameRef.current
+      if (!frame?.contentWindow) return
+      try {
+        frame.contentWindow.postMessage(
+          JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }),
+          '*',
+        )
+      } catch {
+        /* cross-origin postMessage can throw in exotic cases; ignore */
+      }
+    }
+    sendListening()
+    const handshake = window.setTimeout(sendListening, 900)
+    const handshake2 = window.setTimeout(sendListening, 2200)
+
     window.addEventListener('message', onMessage)
-    return () => window.removeEventListener('message', onMessage)
-  }, [videoId])
+    return () => {
+      window.clearTimeout(handshake)
+      window.clearTimeout(handshake2)
+      window.removeEventListener('message', onMessage)
+    }
+  }, [videoId, src])
 
   // Watchdog: if the player never signals ready it is usually blocked or
   // unavailable. We do not assume failure (the frame may just be slow), we show

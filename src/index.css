@@ -1433,3 +1433,143 @@ a {
     display: none;
   }
 }
+
+/* ------------------------------------------------------- score reveal popup */
+
+.score-reveal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 16px;
+  overflow: auto;
+  background: rgba(6, 6, 16, 0.82);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  animation: score-reveal-fade 0.25s ease both;
+}
+
+.score-reveal__card {
+  box-sizing: border-box;
+  width: min(460px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 30px 26px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: linear-gradient(180deg, rgba(28, 28, 48, 0.96), rgba(16, 16, 30, 0.96));
+  box-shadow: var(--shadow);
+  text-align: center;
+  animation: score-reveal-pop 0.4s cubic-bezier(0.2, 0.85, 0.3, 1.2) both;
+}
+
+.score-reveal__rolling,
+.score-reveal__result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.score-reveal__congrats {
+  margin: 0;
+  font-size: clamp(1.5rem, 6vw, 2.2rem);
+  font-weight: 800;
+  line-height: 1.1;
+  background: linear-gradient(120deg, var(--accent-gold), var(--accent-red));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: score-reveal-pop 0.5s cubic-bezier(0.2, 0.85, 0.3, 1.3) both;
+}
+
+.score-reveal__label {
+  margin: 0;
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 1.6px;
+  color: var(--text-dim);
+}
+
+.score-reveal__value {
+  margin: 0;
+  font-size: clamp(4rem, 22vw, 6.5rem);
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  background: linear-gradient(120deg, var(--accent-gold), var(--accent-red));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.score-reveal__value--rolling {
+  opacity: 0.9;
+  filter: blur(0.4px);
+}
+
+.score-reveal__stars {
+  margin: 0;
+  font-size: 1.6rem;
+  letter-spacing: 4px;
+  color: var(--accent-gold);
+}
+
+.score-reveal__stars-dim {
+  color: rgba(255, 255, 255, 0.16);
+}
+
+.score-reveal__grade {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.score-reveal__who {
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--text-muted);
+}
+
+.score-reveal__who strong {
+  color: var(--text);
+}
+
+.score-reveal__hint,
+.score-reveal__note {
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--text-dim);
+  max-width: 40ch;
+  line-height: 1.5;
+}
+
+@keyframes score-reveal-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes score-reveal-pop {
+  0% {
+    transform: scale(0.86);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+

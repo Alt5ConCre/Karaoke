@@ -46,7 +46,7 @@ export function parseVideoId(input: string): string | null {
 }
 
 /** Privacy-preserving embed base; enablejsapi is required by the IFrame API. */
-export function buildEmbedUrl(videoId: string, origin: string): string {
+export function buildEmbedUrl(videoId: string, origin: string, autoplay = false): string {
   const params = new URLSearchParams({
     enablejsapi: '1',
     rel: '0',
@@ -54,6 +54,7 @@ export function buildEmbedUrl(videoId: string, origin: string): string {
     playsinline: '1',
     origin,
   })
+  if (autoplay) params.set('autoplay', '1')
   return `https://www.youtube-nocookie.com/embed/${videoId}?${params.toString()}`
 }
 

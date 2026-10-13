@@ -12,6 +12,10 @@ interface MediaPlayerProps {
   heading?: string
   /** Size variant of the frame. */
   variant?: 'room' | 'card'
+  /** Called when the song reaches its end, so the room can score it. */
+  onEnded?: () => void
+  /** Start playing as soon as the player mounts (used when auto-advancing). */
+  autoPlay?: boolean
 }
 
 /**
@@ -22,7 +26,7 @@ interface MediaPlayerProps {
  * this renders YouTubePlayer exactly as before and every existing behaviour
  * holds. Only when a local source exists do we render a plain <video> instead.
  */
-export function MediaPlayer({ song, videoId, heading, variant = 'card' }: MediaPlayerProps) {
+export function MediaPlayer({ song, videoId, heading, variant = 'card', onEnded, autoPlay }: MediaPlayerProps) {
   const { fileMeta, loadFileUrl, version } = useMediaLibrary()
   const meta = fileMeta(song.id)
   const [loaded, setLoaded] = useState<{ songId: string; url: string } | null>(null)
@@ -57,6 +61,8 @@ export function MediaPlayer({ song, videoId, heading, variant = 'card' }: MediaP
         heading={heading}
         variant={variant}
         source="file"
+        onEnded={onEnded}
+        autoPlay={autoPlay}
       />
     )
   }
@@ -69,13 +75,22 @@ export function MediaPlayer({ song, videoId, heading, variant = 'card' }: MediaP
         heading={heading}
         variant={variant}
         source="folder"
+        onEnded={onEnded}
+        autoPlay={autoPlay}
       />
     )
   }
 
   return (
     <>
-      <YouTubePlayer song={song} videoId={videoId} heading={heading} variant={variant} />
+      <YouTubePlayer
+        song={song}
+        videoId={videoId}
+        heading={heading}
+        variant={variant}
+        onEnded={onEnded}
+        autoPlay={autoPlay}
+      />
       <AddLocalMediaBox songId={song.id} />
     </>
   )
@@ -87,9 +102,19 @@ interface LocalMediaPlayerProps {
   heading?: string
   variant: 'room' | 'card'
   source: 'file' | 'folder'
+  onEnded?: () => void
+  autoPlay?: boolean
 }
 
-function LocalMediaPlayer({ src, song, heading, variant, source }: LocalMediaPlayerProps) {
+function LocalMediaPlayer({
+  src,
+  song,
+  heading,
+  variant,
+  source,
+  onEnded,
+  autoPlay,
+}: LocalMediaPlayerProps) {
   return (
     <div className={`player player--${variant} player--local`}>
       {heading && <p className="player__heading">{heading}</p>}
@@ -101,6 +126,8 @@ function LocalMediaPlayer({ src, song, heading, variant, source }: LocalMediaPla
           controls
           playsInline
           preload="metadata"
+          autoPlay={autoPlay}
+          onEnded={onEnded}
         />
       </div>
       <p className="player__attribution">
