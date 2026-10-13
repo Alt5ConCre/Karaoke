@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import type { Song } from '../types.ts'
 import { useMediaLibrary } from '../state/useMediaLibrary.ts'
+import { extensionOf, isKaraokeMidiExt } from '../lib/mediaTypes.ts'
 import { YouTubePlayer } from './YouTubePlayer.tsx'
 import { AddLocalMediaBox } from './AddLocalMediaBox.tsx'
+import { MidiKaraokePlayer } from './MidiKaraokePlayer.tsx'
 
 interface MediaPlayerProps {
   song: Song
@@ -54,6 +56,19 @@ export function MediaPlayer({ song, videoId, heading, variant = 'card', onEnded,
         </div>
       )
     }
+    if (isKaraokeMidiExt(extensionOf(meta.name ?? ''))) {
+      return (
+        <MidiKaraokePlayer
+          src={url}
+          song={song}
+          heading={heading}
+          variant={variant}
+          source="file"
+          onEnded={onEnded}
+          autoPlay={autoPlay}
+        />
+      )
+    }
     return (
       <LocalMediaPlayer
         src={url}
@@ -68,6 +83,19 @@ export function MediaPlayer({ song, videoId, heading, variant = 'card', onEnded,
   }
 
   if (song.mediaUrl) {
+    if (isKaraokeMidiExt(extensionOf(song.mediaUrl))) {
+      return (
+        <MidiKaraokePlayer
+          src={song.mediaUrl}
+          song={song}
+          heading={heading}
+          variant={variant}
+          source="folder"
+          onEnded={onEnded}
+          autoPlay={autoPlay}
+        />
+      )
+    }
     return (
       <LocalMediaPlayer
         src={song.mediaUrl}

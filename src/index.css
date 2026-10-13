@@ -855,6 +855,159 @@ a {
   font-size: 0.85rem;
 }
 
+/* ---------------------------------------------- MIDI karaoke (.kar/.mid) -- */
+
+.midi-player {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.midi-player__heading {
+  font-size: 0.86rem;
+  color: var(--text-muted);
+}
+
+.midi-player__screen {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  background: radial-gradient(ellipse at 50% 120%, rgba(34, 211, 238, 0.14), transparent 60%),
+    linear-gradient(180deg, #0b0f1a 0%, #0d1220 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 20px;
+  text-align: center;
+}
+
+.midi-player__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: center;
+}
+
+.midi-player__title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  margin: 0;
+}
+
+.midi-player__artist {
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.midi-player__tag {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0;
+}
+
+.midi-player__lyrics {
+  width: 100%;
+  min-height: 2.4em;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.midi-player__line {
+  font-size: 1.35rem;
+  line-height: 1.4;
+  font-weight: 600;
+  min-height: 1.4em;
+  margin: 0;
+  word-break: break-word;
+}
+
+.midi-player__next {
+  font-size: 0.95rem;
+  line-height: 1.4;
+  color: var(--text-dim);
+  margin: 0;
+  word-break: break-word;
+  min-height: 1.4em;
+}
+
+.midi-player__syl {
+  color: rgba(255, 255, 255, 0.45);
+  transition: color 120ms linear;
+}
+
+.midi-player__syl--on {
+  color: #fff;
+}
+
+.midi-player__syl--up {
+  color: rgba(255, 255, 255, 0.28);
+}
+
+.midi-player__hint {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.midi-player__hint--error {
+  color: var(--danger, #ff5c6c);
+}
+
+.midi-player__controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.midi-player__toggle {
+  flex: none;
+  padding: 7px 18px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--accent-cyan);
+  color: #04121a;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.midi-player__toggle:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.midi-player__seek {
+  flex: 1 1 160px;
+  accent-color: var(--accent-cyan);
+}
+
+.midi-player__volume {
+  flex: 0 1 90px;
+  accent-color: var(--accent-cyan);
+}
+
+.midi-player__time {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.midi-player__attribution {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+
 .add-media {
   display: flex;
   flex-direction: column;

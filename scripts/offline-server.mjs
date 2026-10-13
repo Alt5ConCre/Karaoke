@@ -15,8 +15,22 @@ import { splitTitleArtist } from '../src/lib/songs.ts'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const PROJECT_ROOT = path.resolve(__dirname, '..')
 
-const VIDEO_ORDER = ['video.mp4', 'video.webm', 'video.m4a', 'song.mp4', 'karaoke.mp4', 'audio.mp3']
-const VIDEO_EXTS = new Set(['.mp4', '.webm', '.m4a', '.mp3'])
+const VIDEO_ORDER = [
+  'video.mp4',
+  'video.webm',
+  'video.m4a',
+  'song.mp4',
+  'karaoke.mp4',
+  'audio.mp3',
+  'karaoke.kar',
+  'karaoke.mid',
+  'karaoke.midi',
+  'song.kar',
+  'video.kar',
+  'audio.mid',
+  'audio.midi',
+]
+const VIDEO_EXTS = new Set(['.mp4', '.webm', '.m4a', '.mp3', '.kar', '.mid', '.midi'])
 const COVER_ORDER = ['cover.jpg', 'cover.png', 'cover.webp', 'cover.jpeg', 'poster.jpg', 'poster.png']
 
 const MIME = {
@@ -38,6 +52,9 @@ const MIME = {
   '.mp3': 'audio/mpeg',
   '.woff2': 'font/woff2',
   '.txt': 'text/plain; charset=utf-8',
+  '.kar': 'audio/midi',
+  '.mid': 'audio/midi',
+  '.midi': 'audio/midi',
   '.exe': 'application/octet-stream',
   '.bat': 'text/plain; charset=utf-8',
   '.md': 'text/plain; charset=utf-8',

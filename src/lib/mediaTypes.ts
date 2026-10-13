@@ -7,6 +7,10 @@
  * cannot play (`.avi`, `.wmv`, …) are deliberately left out, so the file picker
  * and the validators never invite a song that would fail on screen.
  *
+ * Karaoke MIDI (`.kar`/`.mid`/`.midi`) is the exception: the browser cannot
+ * render it directly, but the app loads it and synthesizes the playback
+ * itself, so it is accepted and routed to the MIDI karaoke player separately.
+ *
  * Kept free of React and DOM-only globals so the test harness can import it.
  */
 
@@ -29,6 +33,18 @@ export const EXTRA_MEDIA_EXTENSIONS = [
 
 export const MEDIA_EXTENSIONS = [...CORE_MEDIA_EXTENSIONS, ...EXTRA_MEDIA_EXTENSIONS]
 
+/**
+ * Karaoke MIDI: the browser cannot decode these, but the app parses the
+ * standard MIDI file itself and synthesizes the playback, so they are still
+ * accepted — and routed to the MIDI karaoke player instead of <video>/<audio>.
+ */
+export const KARAOKE_MIDI_EXTENSIONS = ['.kar', '.mid', '.midi']
+
+/** True when the extension is a karaoke MIDI file. */
+export function isKaraokeMidiExt(ext: string): boolean {
+  return KARAOKE_MIDI_EXTENSIONS.includes(ext)
+}
+
 /** Extensions that are audio only (the player shows no picture). */
 export const AUDIO_EXTENSIONS = new Set([
   '.m4a',
@@ -46,7 +62,7 @@ export const AUDIO_EXTENSIONS = new Set([
  * `video/*,audio/*` hints first, then the explicit extensions so a mistyped
  * MIME type on the OS side still shows the file.
  */
-export const MEDIA_ACCEPT = `video/*,audio/*,${MEDIA_EXTENSIONS.join(',')}`
+export const MEDIA_ACCEPT = `video/*,audio/*,${[...MEDIA_EXTENSIONS, ...KARAOKE_MIDI_EXTENSIONS].join(',')}`
 
 /** The minimal shape the validators need — a File or a plain object. */
 export interface MediaLike {
@@ -62,12 +78,13 @@ export function extensionOf(name: string): string {
 
 /**
  * True when a file looks like something the player can open — either the
- * browser reported a media MIME type, or the extension is on our list.
+ * browser reported a media MIME type, or the extension is on our list
+ * (including karaoke MIDI, which the app renders itself).
  */
 export function isPlayableMedia(file: MediaLike): boolean {
   const type = file.type ?? ''
   if (type.startsWith('video/') || type.startsWith('audio/')) return true
-  return MEDIA_EXTENSIONS.includes(extensionOf(file.name))
+  return [...MEDIA_EXTENSIONS, ...KARAOKE_MIDI_EXTENSIONS].includes(extensionOf(file.name))
 }
 
 /** True when a file is audio only (callers may label it differently). */

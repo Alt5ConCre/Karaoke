@@ -20,7 +20,7 @@ const MODES: Array<{ id: Mode; label: string }> = [
 ]
 
 /** Cap a single bulk action so we never try to write thousands of files at once. */
-const MAX_BULK = 5000
+const MAX_BULK = 20000
 
 type Entry = { song: CustomSong; file?: File }
 

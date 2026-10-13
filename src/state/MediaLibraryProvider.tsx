@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import type { ReactNode } from 'react'
 import type { Song } from '../types.ts'
 import { SONGS, getSongById } from '../data/songs.ts'
-import { ULTRATAR_SONGS } from '../data/ultrastarSongs.ts'
 import { fetchLocalSongs } from '../lib/localLibrary.ts'
 import {
   deleteFile,
@@ -43,7 +42,7 @@ export function MediaLibraryProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const catalog = useMemo(() => {
-    const shipped = [...SONGS, ...ULTRATAR_SONGS]
+    const shipped = [...SONGS]
     const extra = [...localSongs, ...customSongs]
     if (extra.length === 0) return shipped
     const known = new Set(shipped.map((song) => song.id))

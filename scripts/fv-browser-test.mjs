@@ -4,12 +4,12 @@
 // Serves dist/ on a local port (SPA fallback) and drives three tabs.
 
 import { createServer } from 'node:http'
-import { readFile } from 'node:fs/promises'
+import { readFile, mkdtemp, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
-import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
+import { buildKarFixture } from './fv-midi-fixture.mjs'
 
 const [DIST, CHROME] = process.argv.slice(2)
 if (!DIST || !CHROME) {
@@ -192,7 +192,7 @@ async function test(name, fn) {
 const A = await newTab(`${BASE}/`)
 await evalJs(A, HELPERS)
 
-await test('homepage renders: title, hero, demo banner, 52-song grid, local transport', async () => {
+await test('homepage renders: title, hero, demo banner, 13-song grid, local transport', async () => {
   await waitFor(A, `__qs('.hero__title')`, 'hero title')
   const title = await evalJs(A, `document.title`)
   assertTrue(title.includes('Filipino Videoke'), `document.title = ${title}`)
@@ -201,7 +201,7 @@ await test('homepage renders: title, hero, demo banner, 52-song grid, local tran
   const banner = await evalJs(A, `__text(__qs('.demo-banner'))`)
   assertTrue(banner.includes('simulated'), 'banner must say scores are simulated')
   const count = await evalJs(A, `__qsa('.song-card').length`)
-  assertTrue(count === 52, `expected 52 song cards, got ${count}`)
+  assertTrue(count === 13, `expected 13 song cards, got ${count}`)
   const transport = await evalJs(A, `__text(__qs('.hero__transport'))`)
   assertTrue(transport.includes('Local room (this browser)'), `transport = ${transport}`)
   const identity = await evalJs(A, `__text(__qs('.chip--identity'))`)
@@ -230,14 +230,14 @@ await test('language filter pills narrow to one catalog entry', async () => {
     A,
     `[...document.querySelectorAll('.pill')].find((b) => b.innerText.trim() === 'English').click()`,
   )
-  await waitFor(A, `__text(__qs('.results-line')).includes('40 songs')`, '40 results for English')
+  await waitFor(A, `__text(__qs('.results-line')).includes('1 song')`, '1 result for English')
   const title = await evalJs(A, `__qs('.song-card__title').innerText`)
   assertTrue(title.includes('Ending Song'), `English result = ${title}`)
   await evalJs(
     A,
     `[...document.querySelectorAll('.pill')].find((b) => b.innerText.trim() === 'All').click()`,
   )
-  await waitFor(A, `__qsa('.song-card').length === 52`, 'restore all')
+  await waitFor(A, `__qsa('.song-card').length === 13`, 'restore all')
 })
 
 await test('create room navigates to /room/CODE and shows the code', async () => {
@@ -293,7 +293,7 @@ await test('host tab sees the new singer appear through cross-tab sync', async (
 })
 
 await test('second singer queues a song from their own tab', async () => {
-  await waitFor(B, `__qsa('.song-card').length === 52`, 'catalog on B')
+  await waitFor(B, `__qsa('.song-card').length === 13`, 'catalog on B')
   await evalJs(B, `__qsa('.song-card')[0].querySelector('button.btn--primary').click()`)
   await waitFor(
     A,
@@ -414,13 +414,13 @@ const C = await newTab(`${BASE}/`)
 await evalJs(C, HELPERS)
 
 await test('add-song: form adds a custom song, then Remove takes it back', async () => {
-  await waitFor(C, `__qsa('.song-card').length === 52`, 'full catalog on C')
+  await waitFor(C, `__qsa('.song-card').length === 13`, 'full catalog on C')
   await evalJs(C, `__qs('.add-song .panel__head button').click()`)
   await waitFor(C, `__qs('#add-song-title')`, 'add-song single form')
   await evalJs(C, `__set(__qs('#add-song-title'), 'Test Custom Song')`)
   await evalJs(C, `__set(__qs('#add-song-artist'), 'QA Bot')`)
   await evalJs(C, `__qs('.add-song form button[type=submit]').click()`)
-  await waitFor(C, `__qsa('.song-card').length === 53`, 'one more card after add')
+  await waitFor(C, `__qsa('.song-card').length === 14`, 'one more card after add')
   await waitFor(C, `__qs('.add-song__notice')`, 'add-song notice')
   const badgeCount = await evalJs(C, `__qsa('.badge--user').length`)
   assertTrue(badgeCount === 1, `expected one "Your song" badge, got ${badgeCount}`)
@@ -438,7 +438,74 @@ await test('add-song: form adds a custom song, then Remove takes it back', async
        ;[...c.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Remove').click()
      })()`,
   )
-  await waitFor(C, `__qsa('.song-card').length === 52`, 'card removed')
+  await waitFor(C, `__qsa('.song-card').length === 13`, 'card removed')
+})
+
+await test('add-song: a .kar file previews through the MIDI karaoke player', async () => {
+  if (!(await evalJs(C, `!!__qs('.add-song__body')`))) {
+    await evalJs(C, `__qs('.add-song .panel__head button').click()`)
+    await waitFor(C, `__qs('.add-song__body')`, 'add-song panel body')
+  }
+  await evalJs(
+    C,
+    `[...document.querySelectorAll('.segmented__option')].find((b) => b.innerText.includes('Pick files')).click()`,
+  )
+  await waitFor(C, `__qs('input[aria-label="Choose video or audio files from this device"]')`, 'files input')
+
+  const karDir = await mkdtemp(path.join(tmpdir(), 'fv-kar-'))
+  const karPath = path.join(karDir, 'Full Sample Song.kar')
+  await writeFile(karPath, buildKarFixture())
+
+  await C.send('DOM.enable')
+  const doc = await C.send('DOM.getDocument')
+  const q = await C.send('DOM.querySelector', {
+    nodeId: doc.root.nodeId,
+    selector: 'input[aria-label="Choose video or audio files from this device"]',
+  })
+  assertTrue(q.nodeId > 0, 'must find the files input node')
+  await C.send('DOM.setFileInputFiles', { nodeId: q.nodeId, files: [karPath] })
+
+  try {
+    await waitFor(C, `__qsa('.song-card').length === 14`, 'kar card added')
+  } catch (error) {
+    const dbg = await evalJs(
+      C,
+      `({ notice: __qs('.add-song__notice') ? __text(__qs('.add-song__notice')) : null, cards: __qsa('.song-card').length, titles: __qsa('.song-card__title').map((e) => e.innerText).join('|') })`,
+    )
+    console.log(`DIAG  ${JSON.stringify(dbg)}`)
+    throw error
+  }
+  await waitFor(
+    C,
+    `__qsa('.song-card').some((c) => c.querySelector('.song-card__title').innerText.includes('Full Sample Song'))`,
+    'kar song card',
+  )
+  await evalJs(C, PREVIEW_BUTTON('Full Sample Song'))
+  await waitFor(
+    C,
+    `(${CARD_BY_TITLE('Full Sample Song')}).querySelector('.midi-player')`,
+    'MIDI player in the card',
+    12000,
+  )
+  const midiText = await evalJs(
+    C,
+    `__text((${CARD_BY_TITLE('Full Sample Song')}).querySelector('.midi-player'))`,
+  )
+  assertTrue(
+    midiText.includes('Full Sample Song') &&
+      midiText.toUpperCase().includes('ENGLISH') &&
+      midiText.includes('Hel') &&
+      midiText.includes('lo'),
+    `midi player text = ${midiText}`,
+  )
+  await evalJs(
+    C,
+    `(() => {
+       const c = ${CARD_BY_TITLE('Full Sample Song')}
+       ;[...c.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Remove').click()
+     })()`,
+  )
+  await waitFor(C, `__qsa('.song-card').length === 13`, 'kar card removed')
 })
 
 // console noise (favicon etc.) is a warning only; uncaught exceptions fail.

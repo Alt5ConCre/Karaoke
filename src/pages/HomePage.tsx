@@ -2,7 +2,6 @@ import { CreateJoinRoom } from '../components/CreateJoinRoom.tsx'
 import { AddSongBox } from '../components/AddSongBox.tsx'
 import { DemoBanner } from '../components/DemoBanner.tsx'
 import { SongBrowser } from '../components/SongBrowser.tsx'
-import { ULTRATAR_LIBRARY } from '../data/ultrastarSongs.ts'
 import { useRoom } from '../state/useRoom.ts'
 
 export function HomePage() {
@@ -32,15 +31,6 @@ export function HomePage() {
       <AddSongBox />
 
       <SongBrowser heading="Demo song catalog" />
-
-      <p className="library-note">
-        Also streaming <strong>{ULTRATAR_LIBRARY.count}</strong> Creative Commons karaoke tracks from
-        the{' '}
-        <a href={ULTRATAR_LIBRARY.repo} target="_blank" rel="noreferrer">
-          UltraStar Deluxe song pack
-        </a>
-        . {ULTRATAR_LIBRARY.note}
-      </p>
 
       <footer className="page-footer">
         <p>

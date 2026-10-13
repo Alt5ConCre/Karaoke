@@ -85,6 +85,8 @@ const { createLocalAdapter, listLocalRoomCodes, deleteLocalRoom } = await import
 )
 const mediaTypes = await import(url('lib/mediaTypes.ts'))
 const customSongs = await import(url('lib/customSongs.ts'))
+const midi = await import(url('lib/midi.ts'))
+const { buildKarFixture, buildPlainMidi, buildSmpteMidi } = await import('./fv-midi-fixture.mjs')
 
 // ================================ ids =====================================
 await test('normalizeRoomCode: uppercases, strips symbols, slices to 5', () => {
@@ -393,6 +395,63 @@ await test('custom song store: add dedupes by id, remove frees the id', () => {
   assert.equal(customSongs.removeCustomSong(a.id), true)
   assert.equal(customSongs.removeCustomSong(b.id), true)
   assert.equal(customSongs.getCustomSongs().length, start)
+})
+
+// ================================ midi ======================================
+await test('parseMidiKaraoke: rejects non-MIDI bytes', () => {
+  assert.equal(midi.parseMidiKaraoke(new TextEncoder().encode('this is not a midi file')), null)
+  assert.equal(midi.parseMidiKaraoke(new Uint8Array(4)), null)
+})
+
+await test('parseMidiKaraoke: kar fixture parses tags, banner and timing', () => {
+  const song = midi.parseMidiKaraoke(buildKarFixture())
+  assert.ok(song, 'must parse the karaoke fixture')
+  assert.equal(song.isKar, true)
+  assert.equal(song.title, 'Full Sample Song')
+  assert.equal(song.language, 'English')
+  assert.equal(song.artist, 'Test Artist')
+  assert.equal(song.format, 0)
+  assert.equal(song.division, 96)
+  assert.equal(song.ticksPerQuarter, 96)
+  assert.ok(Math.abs(song.durationSec - 1.0) < 1e-6, `duration ~1s, got ${song.durationSec}`)
+  // 120 bpm, 96 tpq → tick = 500000e-6/96 = 5.208333ms; 48 ticks = 0.25 s
+  assert.equal(song.lines.length, 4)
+  assert.deepEqual(
+    song.lines.map((l) => l.text),
+    ['Hel', 'lo', 'Wo', 'rld'],
+  )
+  assert.equal(song.syllables[0].startSec, 0)
+  assert.ok(Math.abs(song.syllables[0].endSec - 0.25) < 1e-6)
+  assert.ok(Math.abs(song.syllables[2].startSec - 0.5) < 1e-6)
+  assert.ok(Math.abs(song.syllables[3].startSec - 0.75) < 1e-6)
+  // melody: 60, 62, 64, 65 starting at 0, .25, .5, .75 with length .25
+  assert.equal(song.notes.length, 4)
+  assert.deepEqual(song.notes.map((n) => n.key), [60, 62, 64, 65])
+  assert.ok(Math.abs(song.notes[0].startSec - 0) < 1e-6)
+  assert.ok(Math.abs(song.notes[0].endSec - 0.25) < 1e-6)
+  assert.ok(Math.abs(song.notes[3].endSec - 1.0) < 1e-6)
+})
+
+await test('parseMidiKaraoke: plain instrumental has no lyrics but music', () => {
+  const song = midi.parseMidiKaraoke(buildPlainMidi())
+  assert.ok(song)
+  assert.equal(song.isKar, false, 'no banner → not karaoke')
+  assert.equal(song.title, 'My Song', 'falls back to track name')
+  assert.equal(song.syllables.length, 0)
+  assert.equal(song.lines.length, 0)
+  assert.equal(song.programChanges.length, 1)
+  assert.equal(song.programChanges[0].program, 40)
+  assert.equal(song.notes.length, 1)
+  assert.equal(song.notes[0].key, 55)
+  assert.ok(song.durationSec > 0.2 && song.durationSec < 0.3, `128bpm 48 ticks ≈ 0.234s, got ${song.durationSec}`)
+})
+
+await test('parseMidiKaraoke: SMPTE time division converts ticks to seconds', () => {
+  const song = midi.parseMidiKaraoke(buildSmpteMidi())
+  assert.ok(song)
+  assert.equal(song.ticksPerQuarter, null)
+  // 25 fps × 40 tpf = 1000 ticks/s → 48 ticks = 48 ms
+  assert.ok(Math.abs(song.notes[0].endSec - 0.048) < 1e-6, `got ${song.notes[0].endSec}`)
 })
 
 // ---- summary ----
