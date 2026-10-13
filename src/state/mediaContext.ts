@@ -1,15 +1,18 @@
 import { createContext } from 'react'
 import type { Song } from '../types.ts'
 import type { LocalFileMeta } from '../lib/mediaStore.ts'
+import type { CustomSong } from '../lib/customSongs.ts'
 
 /** How a song will actually be played right now, in priority order. */
-export type MediaSourceKind = 'file' | 'folder' | 'youtube' | 'none'
+export type MediaSourceKind = 'file' | 'ultrastar' | 'folder' | 'youtube' | 'none'
 
 export interface MediaLibraryValue {
   /** Demo catalog merged with any Songs/ folder entries discovered locally. */
   catalog: Song[]
   /** Just the Songs/ folder entries (empty when none / not served locally). */
   localSongs: Song[]
+  /** Songs the singer added on this device (persisted in localStorage). */
+  customSongs: CustomSong[]
   /** True once the folder scan has settled (even when it found nothing). */
   folderScanned: boolean
   /** Resolve any song id — demo or local — to its entry. */
@@ -26,6 +29,10 @@ export interface MediaLibraryValue {
   attachFile: (songId: string, file: File) => Promise<void>
   /** Forget the stored file for a song id. */
   removeFile: (songId: string) => Promise<void>
+  /** Add songs the user created; optionally attach a file to each at once. */
+  addCustomSongs: (entries: Array<{ song: CustomSong; file?: File }>) => Promise<void>
+  /** Remove a user-created song (and any file stored for it). */
+  removeCustomSong: (songId: string) => Promise<void>
   /** Bumped on every attach/remove so views re-render. */
   version: number
 }

@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import type { Song } from '../types.ts'
 import { SONGS, getSongById } from '../data/songs.ts'
+import { ULTRATAR_SONGS } from '../data/ultrastarSongs.ts'
 import { fetchLocalSongs } from '../lib/localLibrary.ts'
 import {
   deleteFile,
@@ -11,6 +12,13 @@ import {
   writeFileMetaMap,
 } from '../lib/mediaStore.ts'
 import type { LocalFileMeta, LocalFileMetaMap } from '../lib/mediaStore.ts'
+import {
+  addCustomSongs as addCustomSongsToStore,
+  getCustomSongs,
+  removeCustomSong as removeCustomSongFromStore,
+  subscribeCustomSongs,
+} from '../lib/customSongs.ts'
+import type { CustomSong } from '../lib/customSongs.ts'
 import { MediaLibraryContext } from './mediaContext.ts'
 import type { MediaLibraryValue, MediaSourceKind } from './mediaContext.ts'
 
@@ -20,6 +28,7 @@ export function MediaLibraryProvider({ children }: { children: ReactNode }) {
   const [fileMetaMap, setFileMetaMap] = useState<LocalFileMetaMap>(() => readFileMetaMap())
   const [version, setVersion] = useState(0)
   const urlCache = useRef(new Map<string, string>())
+  const customSongs = useSyncExternalStore(subscribeCustomSongs, getCustomSongs, getCustomSongs)
 
   useEffect(() => {
     let alive = true
@@ -34,10 +43,17 @@ export function MediaLibraryProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const catalog = useMemo(() => {
-    if (localSongs.length === 0) return SONGS
-    const known = new Set(SONGS.map((song) => song.id))
-    return [...SONGS, ...localSongs.filter((song) => !known.has(song.id))]
-  }, [localSongs])
+    const shipped = [...SONGS, ...ULTRATAR_SONGS]
+    const extra = [...localSongs, ...customSongs]
+    if (extra.length === 0) return shipped
+    const known = new Set(shipped.map((song) => song.id))
+    const deduped = extra.filter((song) => {
+      if (known.has(song.id)) return false
+      known.add(song.id)
+      return true
+    })
+    return deduped.length ? [...shipped, ...deduped] : shipped
+  }, [localSongs, customSongs])
 
   const songIndex = useMemo(() => {
     const map = new Map<string, Song>()
@@ -56,6 +72,7 @@ export function MediaLibraryProvider({ children }: { children: ReactNode }) {
   const sourceKind = useCallback(
     (song: Song): MediaSourceKind => {
       if (fileMetaMap[song.id]) return 'file'
+      if (song.source === 'ultrastar') return 'ultrastar'
       if (song.mediaUrl) return 'folder'
       if (song.youtubeId) return 'youtube'
       return 'none'
@@ -112,6 +129,24 @@ export function MediaLibraryProvider({ children }: { children: ReactNode }) {
     [commitMeta, dropCachedUrl],
   )
 
+  const addCustomSongs = useCallback(
+    async (entries: Array<{ song: CustomSong; file?: File }>): Promise<void> => {
+      addCustomSongsToStore(entries.map((entry) => entry.song))
+      for (const entry of entries) {
+        if (entry.file) await attachFile(entry.song.id, entry.file)
+      }
+    },
+    [attachFile],
+  )
+
+  const removeCustomSong = useCallback(
+    async (songId: string): Promise<void> => {
+      await removeFile(songId)
+      removeCustomSongFromStore(songId)
+    },
+    [removeFile],
+  )
+
   useEffect(() => {
     const cache = urlCache.current
     return () => {
@@ -124,6 +159,7 @@ export function MediaLibraryProvider({ children }: { children: ReactNode }) {
     () => ({
       catalog,
       localSongs,
+      customSongs,
       folderScanned,
       getSong,
       sourceKind,
@@ -132,11 +168,14 @@ export function MediaLibraryProvider({ children }: { children: ReactNode }) {
       loadFileUrl,
       attachFile,
       removeFile,
+      addCustomSongs,
+      removeCustomSong,
       version,
     }),
     [
       catalog,
       localSongs,
+      customSongs,
       folderScanned,
       getSong,
       sourceKind,
@@ -145,6 +184,8 @@ export function MediaLibraryProvider({ children }: { children: ReactNode }) {
       loadFileUrl,
       attachFile,
       removeFile,
+      addCustomSongs,
+      removeCustomSong,
       version,
     ],
   )

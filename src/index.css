@@ -573,6 +573,17 @@ a {
   margin-right: 8px;
 }
 
+.library-note {
+  margin-top: 14px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.library-note a {
+  color: var(--accent-gold);
+}
+
 .empty-state {
   padding: 30px;
   text-align: center;
@@ -1571,5 +1582,92 @@ a {
   100% {
     transform: scale(1);
   }
+}
+
+/* --------------------------------------------------------------- add song */
+
+.song-card__badges {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.badge--user {
+  background: rgba(59, 110, 245, 0.16);
+  color: #c5d5ff;
+  border: 1px solid rgba(59, 110, 245, 0.42);
+}
+
+.add-song__body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.add-song__form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.add-song__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.add-song__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.add-song__field label {
+  font-size: 0.76rem;
+  color: var(--text-dim);
+}
+
+.add-song__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.add-song__input {
+  font-size: 0.84rem;
+  padding: 10px 12px;
+}
+
+.add-song__paste {
+  width: 100%;
+  min-height: 120px;
+  resize: vertical;
+  font-family: inherit;
+  line-height: 1.5;
+}
+
+.add-song__hint {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.add-song__notice {
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(252, 209, 22, 0.4);
+  background: rgba(252, 209, 22, 0.1);
+  color: var(--accent-gold);
+  font-size: 0.84rem;
+}
+
+.add-song__mono {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--text-muted);
 }
 

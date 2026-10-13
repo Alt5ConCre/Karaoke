@@ -74,7 +74,7 @@ export function MediaPlayer({ song, videoId, heading, variant = 'card', onEnded,
         song={song}
         heading={heading}
         variant={variant}
-        source="folder"
+        source={song.source === 'ultrastar' ? 'ultrastar' : 'folder'}
         onEnded={onEnded}
         autoPlay={autoPlay}
       />
@@ -101,7 +101,7 @@ interface LocalMediaPlayerProps {
   song: Song
   heading?: string
   variant: 'room' | 'card'
-  source: 'file' | 'folder'
+  source: 'file' | 'folder' | 'ultrastar'
   onEnded?: () => void
   autoPlay?: boolean
 }
@@ -133,7 +133,9 @@ function LocalMediaPlayer({
       <p className="player__attribution">
         {source === 'file'
           ? `Playing a file from this device · ${song.title} — ${song.artist}`
-          : `Playing from the local Songs library · ${song.title} — ${song.artist}`}
+          : source === 'ultrastar'
+            ? `Streaming from the UltraStar Creative Commons library · ${song.title} — ${song.artist}`
+            : `Playing from the local Songs library · ${song.title} — ${song.artist}`}
       </p>
       {source === 'file' && (
         <AddLocalMediaBox songId={song.id} label="Replace or remove this file" />

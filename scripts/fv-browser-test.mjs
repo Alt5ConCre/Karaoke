@@ -1,7 +1,7 @@
 // Browser smoke/flow test for FilipinoVideoke using headless Chrome over CDP.
 // No npm deps: Node 24's global fetch + WebSocket drive Chrome's DevTools API.
 // Usage: node fv-browser-test.mjs <abs dist dir> <abs chrome path>
-// Serves dist/ on a local port (SPA fallback) and drives two tabs.
+// Serves dist/ on a local port (SPA fallback) and drives three tabs.
 
 import { createServer } from 'node:http'
 import { readFile } from 'node:fs/promises'
@@ -192,7 +192,7 @@ async function test(name, fn) {
 const A = await newTab(`${BASE}/`)
 await evalJs(A, HELPERS)
 
-await test('homepage renders: title, hero, demo banner, 13-song grid, local transport', async () => {
+await test('homepage renders: title, hero, demo banner, 52-song grid, local transport', async () => {
   await waitFor(A, `__qs('.hero__title')`, 'hero title')
   const title = await evalJs(A, `document.title`)
   assertTrue(title.includes('Filipino Videoke'), `document.title = ${title}`)
@@ -201,7 +201,7 @@ await test('homepage renders: title, hero, demo banner, 13-song grid, local tran
   const banner = await evalJs(A, `__text(__qs('.demo-banner'))`)
   assertTrue(banner.includes('simulated'), 'banner must say scores are simulated')
   const count = await evalJs(A, `__qsa('.song-card').length`)
-  assertTrue(count === 13, `expected 13 song cards, got ${count}`)
+  assertTrue(count === 52, `expected 52 song cards, got ${count}`)
   const transport = await evalJs(A, `__text(__qs('.hero__transport'))`)
   assertTrue(transport.includes('Local room (this browser)'), `transport = ${transport}`)
   const identity = await evalJs(A, `__text(__qs('.chip--identity'))`)
@@ -230,14 +230,14 @@ await test('language filter pills narrow to one catalog entry', async () => {
     A,
     `[...document.querySelectorAll('.pill')].find((b) => b.innerText.trim() === 'English').click()`,
   )
-  await waitFor(A, `__text(__qs('.results-line')).includes('1 song')`, '1 result for English')
+  await waitFor(A, `__text(__qs('.results-line')).includes('40 songs')`, '40 results for English')
   const title = await evalJs(A, `__qs('.song-card__title').innerText`)
   assertTrue(title.includes('Ending Song'), `English result = ${title}`)
   await evalJs(
     A,
     `[...document.querySelectorAll('.pill')].find((b) => b.innerText.trim() === 'All').click()`,
   )
-  await waitFor(A, `__qsa('.song-card').length === 13`, 'restore all')
+  await waitFor(A, `__qsa('.song-card').length === 52`, 'restore all')
 })
 
 await test('create room navigates to /room/CODE and shows the code', async () => {
@@ -293,7 +293,7 @@ await test('host tab sees the new singer appear through cross-tab sync', async (
 })
 
 await test('second singer queues a song from their own tab', async () => {
-  await waitFor(B, `__qsa('.song-card').length === 13`, 'catalog on B')
+  await waitFor(B, `__qsa('.song-card').length === 52`, 'catalog on B')
   await evalJs(B, `__qsa('.song-card')[0].querySelector('button.btn--primary').click()`)
   await waitFor(
     A,
@@ -409,8 +409,40 @@ await test('responsive: no horizontal overflow at phone and desktop sizes', asyn
   assertTrue(desktop.scrollW <= desktop.innerW + 2, `desktop overflow: ${JSON.stringify(desktop)}`)
 })
 
+// ---- add-your-own-songs flow (device-local, third tab) ----
+const C = await newTab(`${BASE}/`)
+await evalJs(C, HELPERS)
+
+await test('add-song: form adds a custom song, then Remove takes it back', async () => {
+  await waitFor(C, `__qsa('.song-card').length === 52`, 'full catalog on C')
+  await evalJs(C, `__qs('.add-song .panel__head button').click()`)
+  await waitFor(C, `__qs('#add-song-title')`, 'add-song single form')
+  await evalJs(C, `__set(__qs('#add-song-title'), 'Test Custom Song')`)
+  await evalJs(C, `__set(__qs('#add-song-artist'), 'QA Bot')`)
+  await evalJs(C, `__qs('.add-song form button[type=submit]').click()`)
+  await waitFor(C, `__qsa('.song-card').length === 53`, 'one more card after add')
+  await waitFor(C, `__qs('.add-song__notice')`, 'add-song notice')
+  const badgeCount = await evalJs(C, `__qsa('.badge--user').length`)
+  assertTrue(badgeCount === 1, `expected one "Your song" badge, got ${badgeCount}`)
+  const hasCard = await evalJs(
+    C,
+    `[...document.querySelectorAll('.song-card')]
+       .some((c) => c.querySelector('.song-card__title').innerText.includes('Test Custom Song'))`,
+  )
+  assertTrue(hasCard, 'the added song must have a card')
+  await evalJs(
+    C,
+    `(() => {
+       const c = [...document.querySelectorAll('.song-card')]
+         .find((c) => c.querySelector('.song-card__title').innerText.includes('Test Custom Song'))
+       ;[...c.querySelectorAll('button')].find((b) => b.innerText.trim() === 'Remove').click()
+     })()`,
+  )
+  await waitFor(C, `__qsa('.song-card').length === 52`, 'card removed')
+})
+
 // console noise (favicon etc.) is a warning only; uncaught exceptions fail.
-const allErrors = [...A.consoleErrors, ...B.consoleErrors]
+const allErrors = [...A.consoleErrors, ...B.consoleErrors, ...C.consoleErrors]
 if (allErrors.length) {
   console.log(`WARN  console errors (checked, not auto-failing):\n  ${allErrors.join('\n  ')}`)
 }
@@ -419,7 +451,7 @@ function assertTrue(cond, msg) {
   if (!cond) throw new Error(msg)
 }
 
-console.log(`\n${passed} passed, ${failures.length} failed, 2 tabs used`)
+console.log(`\n${passed} passed, ${failures.length} failed, 3 tabs used`)
 chrome.kill()
 server.close()
 if (failures.length) process.exit(1)

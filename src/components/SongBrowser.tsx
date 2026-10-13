@@ -27,7 +27,7 @@ interface SongBrowserProps {
 }
 
 export function SongBrowser({ onAdd, addDisabled, addLabel, heading }: SongBrowserProps) {
-  const { catalog } = useMediaLibrary()
+  const { catalog, removeCustomSong } = useMediaLibrary()
   const [query, setQuery] = useState('')
   const [language, setLanguage] = useState<LanguageFilter>('All')
 
@@ -89,6 +89,9 @@ export function SongBrowser({ onAdd, addDisabled, addLabel, heading }: SongBrows
               onAdd={onAdd}
               addDisabled={addDisabled}
               addLabel={addLabel}
+              onRemove={
+                song.source === 'custom' ? (songId) => void removeCustomSong(songId) : undefined
+              }
             />
           ))}
         </div>

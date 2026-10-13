@@ -83,6 +83,8 @@ const rotation = await import(url('lib/rotation.ts'))
 const { createLocalAdapter, listLocalRoomCodes, deleteLocalRoom } = await import(
   url('adapters/localAdapter.ts')
 )
+const mediaTypes = await import(url('lib/mediaTypes.ts'))
+const customSongs = await import(url('lib/customSongs.ts'))
 
 // ================================ ids =====================================
 await test('normalizeRoomCode: uppercases, strips symbols, slices to 5', () => {
@@ -267,6 +269,130 @@ await test('local adapter: an update in one tab reaches a subscriber in another'
 
   assert.ok(received.length >= 1, 'subscriber never heard the update')
   assert.equal(received.at(-1).singers.length, 2)
+})
+
+// =========================== media types =================================
+await test('mediaTypes: extensionOf and the playable-file checks', () => {
+  assert.equal(mediaTypes.extensionOf('Song.MP4'), '.mp4')
+  assert.equal(mediaTypes.extensionOf('noext'), '')
+  assert.equal(mediaTypes.isPlayableMedia({ name: 'a.mp4' }), true)
+  assert.equal(mediaTypes.isPlayableMedia({ name: 'a.wav' }), true)
+  assert.equal(mediaTypes.isPlayableMedia({ name: 'a.avi' }), false)
+  assert.equal(mediaTypes.isPlayableMedia({ name: 'a.txt' }), false)
+  assert.equal(mediaTypes.isPlayableMedia({ name: 'noext', type: 'video/mp4' }), true)
+  assert.equal(mediaTypes.isPlayableMedia({ name: 'noext', type: 'audio/mpeg' }), true)
+  assert.equal(mediaTypes.isPlayableMedia({ name: 'noext', type: 'application/pdf' }), false)
+  assert.equal(mediaTypes.isAudioFile({ name: 'a.mp3' }), true)
+  assert.equal(mediaTypes.isAudioFile({ name: 'a.mp4' }), false)
+  assert.equal(mediaTypes.isAudioFile({ name: 'noext', type: 'audio/flac' }), true)
+  assert.ok(mediaTypes.MEDIA_ACCEPT.includes('video/*'))
+  assert.ok(mediaTypes.MEDIA_ACCEPT.includes('audio/*'))
+  assert.ok(mediaTypes.MEDIA_ACCEPT.includes('.mp4'))
+  assert.ok(mediaTypes.MEDIA_ACCEPT.includes('.flac'))
+  assert.ok(!mediaTypes.MEDIA_ACCEPT.includes('.avi'))
+})
+
+// ============================ custom songs ==============================
+await test('parseSongLines: pipes, languages, comments, blank lines', () => {
+  const lines = customSongs.parseSongLines(
+    [
+      '# my playlist',
+      'Bakit Ngayon Ka Lang | Ogie Alcasid | https://youtu.be/abcd',
+      'Pusong Bato | Jovit Baldivino | Tagalog',
+      'Just A Title',
+      '   ',
+      '|',
+      '',
+    ].join('\n'),
+  )
+  assert.equal(lines.length, 3)
+  assert.deepEqual(lines[0], {
+    title: 'Bakit Ngayon Ka Lang', artist: 'Ogie Alcasid', youtubeId: 'https://youtu.be/abcd',
+  })
+  assert.deepEqual(lines[1], { title: 'Pusong Bato', artist: 'Jovit Baldivino', language: 'Tagalog' })
+  assert.deepEqual(lines[2], { title: 'Just A Title' })
+  assert.equal(customSongs.parseSongLines('').length, 0)
+})
+
+await test('slugify: lowercases, strips accents/junk, trims, caps length', () => {
+  assert.equal(customSongs.slugify('Bakit Ngayon Ka Lang'), 'bakit-ngayon-ka-lang')
+  assert.equal(customSongs.slugify('  Hello!! World  '), 'hello-world')
+  assert.equal(customSongs.slugify('A-B—C'), 'a-b-c')
+  assert.equal(customSongs.slugify('!!!'), '')
+  assert.equal(customSongs.slugify('x'.repeat(100)).length, 48)
+})
+
+await test('buildCustomSong: defaults, language map, youtube parse, id determinism', () => {
+  const song = customSongs.buildCustomSong({
+    title: '  Bakit Ngayon Ka Lang  ',
+    artist: ' Ogie Alcasid ',
+    language: ' english ',
+    genre: 'OPM',
+    youtubeId: 'https://youtu.be/jNQXAC9IVRw',
+  }, 'list')
+  assert.ok(song)
+  assert.equal(song.title, 'Bakit Ngayon Ka Lang')
+  assert.equal(song.artist, 'Ogie Alcasid')
+  assert.equal(song.language, 'English')
+  assert.equal(song.genre, 'OPM')
+  assert.equal(song.youtubeId, 'jNQXAC9IVRw')
+  assert.equal(song.source, 'custom')
+  assert.equal(song.id, 'custom:bakit-ngayon-ka-lang-list')
+  assert.ok(song.createdAt > 0)
+  assert.deepEqual(song.tags, ['my song'])
+
+  assert.equal(customSongs.buildCustomSong({ title: '   ' }), null)
+
+  const plain = customSongs.buildCustomSong({ title: 'X' })
+  assert.equal(plain.artist, 'Unknown artist')
+  assert.equal(plain.genre, 'My songs')
+  assert.equal(plain.language, 'Tagalog')
+  assert.equal(plain.youtubeId, '')
+
+  const badYt = customSongs.buildCustomSong({ title: 'Y', youtubeId: 'not a url' })
+  assert.equal(badYt.youtubeId, '')
+
+  // A reused `unique` hint makes ids stable; omitting it allows repeats.
+  assert.equal(
+    customSongs.buildCustomSong({ title: 'Repeat Me' }, 'bulk').id,
+    customSongs.buildCustomSong({ title: 'Repeat Me' }, 'bulk').id,
+  )
+  assert.notEqual(
+    customSongs.buildCustomSong({ title: 'One Off' }).id,
+    customSongs.buildCustomSong({ title: 'One Off' }).id,
+  )
+})
+
+await test('sanitizeCustomSongs: drops junk and duplicates, fills defaults', () => {
+  const cleaned = customSongs.sanitizeCustomSongs([
+    { id: 'custom:x-1', title: ' Good ' },
+    { id: 'custom:x-1', title: 'dup' },
+    { title: 'no id' },
+    'nonsense',
+    null,
+  ])
+  assert.equal(cleaned.length, 1)
+  assert.equal(cleaned[0].title, 'Good')
+  assert.equal(cleaned[0].artist, 'Unknown artist')
+  assert.equal(cleaned[0].source, 'custom')
+  assert.deepEqual(cleaned[0].tags, ['my song'])
+  assert.equal(customSongs.sanitizeCustomSongs('nope').length, 0)
+})
+
+await test('custom song store: add dedupes by id, remove frees the id', () => {
+  const start = customSongs.getCustomSongs().length
+  const a = customSongs.buildCustomSong({ title: 'Alpha Test' }, 'bulk')
+  const b = customSongs.buildCustomSong({ title: 'Beta Test' }, 'bulk')
+  assert.equal(customSongs.addCustomSongs([a, b]), 2)
+  assert.equal(customSongs.getCustomSongs().length, start + 2)
+  assert.equal(customSongs.addCustomSongs([a]), 0, 'duplicate id must be a no-op')
+  assert.equal(customSongs.getCustomSongs().length, start + 2)
+  assert.equal(customSongs.removeCustomSong(a.id), true)
+  assert.equal(customSongs.removeCustomSong(a.id), false)
+  assert.equal(customSongs.addCustomSongs([a]), 1, 'id is free again after remove')
+  assert.equal(customSongs.removeCustomSong(a.id), true)
+  assert.equal(customSongs.removeCustomSong(b.id), true)
+  assert.equal(customSongs.getCustomSongs().length, start)
 })
 
 // ---- summary ----

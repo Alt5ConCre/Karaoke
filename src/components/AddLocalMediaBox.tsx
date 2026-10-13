@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import { useMediaLibrary } from '../state/useMediaLibrary.ts'
+import { MEDIA_ACCEPT, isPlayableMedia } from '../lib/mediaTypes.ts'
 
 interface AddLocalMediaBoxProps {
   songId: string
@@ -24,6 +25,10 @@ export function AddLocalMediaBox({ songId, label }: AddLocalMediaBoxProps) {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
+    if (!isPlayableMedia(file)) {
+      setError('That file type cannot play here. Try MP4, WebM, MKV, MOV, MP3, M4A, OGG, WAV or FLAC.')
+      return
+    }
     try {
       await attachFile(songId, file)
       setError(null)
@@ -42,7 +47,7 @@ export function AddLocalMediaBox({ songId, label }: AddLocalMediaBoxProps) {
           ref={inputRef}
           className="input add-media__input"
           type="file"
-          accept="video/*,audio/*,.mp4,.webm,.m4a,.mp3,.mov"
+          accept={MEDIA_ACCEPT}
           onChange={handleChange}
           aria-label="Choose a video or audio file from this device"
         />

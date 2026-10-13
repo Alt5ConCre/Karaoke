@@ -29,10 +29,12 @@ export interface Song {
   /** Video duration in seconds, when known. Optional. */
   durationSec?: number
   /**
-   * Where the entry comes from: the shipped demo catalog ('demo') or a folder
-   * in the local `Songs/` library ('folder'). Defaults to 'demo' when absent.
+   * Where the entry comes from: the shipped demo catalog ('demo'), a folder in
+   * the local `Songs/` library ('folder'), the Creative Commons UltraStar pack
+   * ('ultrastar'), or added by the singer on this device ('custom'). Defaults to
+   * 'demo' when absent.
    */
-  source?: 'demo' | 'folder'
+  source?: 'demo' | 'folder' | 'ultrastar' | 'custom'
   /**
    * A same-origin URL the browser can play directly (set for `Songs/` folder
    * entries served by the offline server). When present the player streams this
