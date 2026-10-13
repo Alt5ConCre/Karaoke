@@ -18,7 +18,7 @@ permanent demo banner.
 | Song catalog, search, filters | **Working** |
 | Queue, singer rotation, room codes | **Working** |
 | Leaderboard UI and rules | **Working** |
-| Karaoke playback | **Working *only once you attach a permitted YouTube id*** (see below) |
+| Karaoke playback | **Working** — a file from this device, a local `Songs/` folder, or an attached permitted YouTube id (see below) |
 | Singing scores | **FUN SIMULATION** — a fresh random whole number from 65 to 100 for every finished song |
 
 > **Scores are not measurements.** `generateFunScore()` never listens to a
@@ -56,6 +56,7 @@ Other scripts:
 ```bash
 npm run build    # tsc -b && vite build  → dist/
 npm run preview  # serve the production build
+npm start        # offline server: dist/ + the local Songs/ folder, no network
 npm run lint     # oxlint
 ```
 
@@ -80,6 +81,33 @@ The production build ships a web app manifest and a service worker
   always pass through and are never cached.
 - The service worker registers **only in the production build** and is a pure
   enhancement — if it cannot register, the app still runs.
+
+### Play from your own device (no YouTube needed)
+
+The app can play **your own video/audio files**, so nothing has to come from
+youtube.com:
+
+- **Per song:** open a song and use the *“Play your own video or audio file”* box.
+  The file is stored in your browser (IndexedDB, database `fv-media`) and plays in
+  a plain `<video>` instead of the embed. It never leaves your device.
+- **A whole folder:** drop karaoke files into a `Songs/` folder at the project
+  root and run the offline server:
+
+  ```bash
+  npm run build
+  npm start          # http://127.0.0.1:4175
+  ```
+
+  Each sub-folder is one song. Put a karaoke video named `video.mp4` (or `.webm`,
+  `.m4a`, `.mp3`) inside, plus optional `cover.jpg`, `lyrics.json`, `notes.json`,
+  and a `meta.json` (`{"title","artist","language","genre","tags","youtubeId"}`).
+  The server scans `Songs/`, serves it at `/songs/…`, and lists it at `/api/songs`;
+  the app merges it into the catalog on load. Folder names like
+  `Araw-Araw - Ben&Ben` are split into title/artist automatically.
+
+Playback priority for any song: **your picked file → `Songs/` folder file →
+YouTube embed**. On a static host (e.g. Vercel) `/api/songs` is not present, so
+the app quietly falls back to the demo catalog.
 
 ---
 
@@ -156,7 +184,8 @@ src/
   adapters/        transport seam: local + (dormant) supabase, and the picker
   components/      presentational + interactive pieces (player, queue, panels…)
   data/songs.ts    demo catalog (metadata only) + technical embed id
-  lib/             pure helpers: ids, storage, youtube, scoring, rotation
+  lib/             pure helpers: ids, storage, youtube, scoring, rotation,
+                   localLibrary (Songs/ client), mediaStore (IndexedDB files)
   pages/           HomePage, RoomPage
   state/           contexts + providers + hooks (auth, video library, room)
   types.ts         shared domain types
