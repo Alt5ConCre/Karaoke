@@ -114,7 +114,7 @@ export function AddSongBox() {
     }
     const { entries, skipped } = buildFromFiles(files)
     if (!entries.length) {
-      setError('Those files are not playable video or audio. Try MP4, WebM, MKV, MOV, MP3, M4A, OGG, WAV or FLAC.')
+      setError('Those files are not playable video or audio. Try MP4, WebM, MKV, MOV, MP3, M4A, OGG, WAV, FLAC or karaoke MIDI (.kar/.mid/.midi).')
       return
     }
     const extra = skipped > 0 ? ` (the first ${MAX_BULK} only)` : ''
