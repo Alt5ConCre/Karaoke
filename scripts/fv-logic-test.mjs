@@ -85,6 +85,7 @@ const { createLocalAdapter, listLocalRoomCodes, deleteLocalRoom } = await import
 )
 const mediaTypes = await import(url('lib/mediaTypes.ts'))
 const customSongs = await import(url('lib/customSongs.ts'))
+const background = await import(url('lib/backgrounds.ts'))
 const midi = await import(url('lib/midi.ts'))
 const { buildKarFixture, buildPlainMidi, buildSmpteMidi, buildRealisticKarFixture } = await import('./fv-midi-fixture.mjs')
 
@@ -470,6 +471,82 @@ await test('parseMidiKaraoke: CR line breaks split lines, duplicate lyric track 
     ['Hel', 'lo ', 'Wo', 'rld'],
   )
   assert.ok(Math.abs(song.durationSec - 1.0) < 1e-6, `duration ~1s, got ${song.durationSec}`)
+})
+
+// ============================ backgrounds ===============================
+await test('backgrounds: manifest is well-formed and >= 5 built-in loops', () => {
+  assert.ok(background.BACKGROUNDS.length >= 5, 'need at least 5 built-in videos')
+  const ids = new Set()
+  for (const loop of background.BACKGROUNDS) {
+    assert.ok(loop.id && loop.name, 'id and name required')
+    assert.equal(loop.file, `${loop.id}.mp4`, 'file must be <id>.mp4')
+    assert.ok(loop.category, 'category required')
+    assert.ok(!ids.has(loop.id), `duplicate id ${loop.id}`)
+    ids.add(loop.id)
+    assert.equal(background.isKnownBackground(loop.id), true)
+  }
+  // a nature and an animated/motion entry must exist
+  const cats = new Set(background.BACKGROUNDS.map((l) => l.category))
+  assert.ok(cats.has('nature'), 'needs a Nature loop')
+  assert.ok(cats.has('motion'), 'needs an Animated/3D loop')
+  assert.equal(background.isKnownBackground('none'), false)
+  assert.equal(background.isKnownBackground('nope'), false)
+})
+
+await test('backgrounds: url builders map id -> public asset, empty when unknown', () => {
+  assert.equal(background.backgroundVideoUrl('aurora'), '/backgrounds/aurora.mp4')
+  assert.equal(background.backgroundPosterUrl('aurora'), '/backgrounds/aurora.jpg')
+  assert.equal(background.backgroundVideoUrl('none'), '')
+  assert.equal(background.backgroundPosterUrl('none'), '')
+  assert.equal(background.backgroundVideoUrl('nope'), '')
+  assert.equal(background.backgroundPosterUrl('nope'), '')
+})
+
+await test('sanitizeBackground: clamps dim, fills defaults, rejects unknown ids', () => {
+  assert.deepEqual(background.sanitizeBackground(null), background.DEFAULT_BACKGROUND)
+  assert.deepEqual(background.sanitizeBackground('junk'), background.DEFAULT_BACKGROUND)
+  assert.equal(background.sanitizeBackground({ id: 'nope' }).id, 'none')
+  assert.equal(background.sanitizeBackground({ id: 'aurora' }).id, 'aurora')
+  assert.equal(background.sanitizeBackground({ id: 'aurora' }).enabled, true)
+  assert.equal(background.sanitizeBackground({ id: 'aurora', enabled: false }).enabled, false)
+  assert.equal(background.sanitizeBackground({ id: 'aurora', dim: 9 }).dim, background.MAX_DIM)
+  assert.equal(background.sanitizeBackground({ id: 'aurora', dim: -3 }).dim, 0)
+  assert.equal(background.sanitizeBackground({ id: 'aurora', dim: 0.5 }).dim, 0.5)
+  assert.equal(background.sanitizeBackground({ id: 'aurora', dim: 'x' }).dim, background.DEFAULT_BACKGROUND.dim)
+})
+
+await test('background store: select/toggle/dim persist and notify subscribers', () => {
+  let hits = 0
+  const stop = background.subscribeBackground(() => {
+    hits += 1
+  })
+
+  background.setBackgroundId('aurora')
+  assert.equal(background.getBackground().id, 'aurora')
+  assert.ok(hits >= 1, 'subscriber should hear the change')
+
+  background.setBackgroundEnabled(false)
+  assert.equal(background.getBackground().enabled, false)
+
+  background.setBackgroundDim(5)
+  assert.equal(background.getBackground().dim, background.MAX_DIM)
+  background.setBackgroundDim(-1)
+  assert.equal(background.getBackground().dim, 0)
+
+  assert.ok(localStorageStub.getItem('fv:background'), 'state must be persisted')
+  const saved = JSON.parse(localStorageStub.getItem('fv:background'))
+  assert.equal(saved.id, 'aurora')
+  assert.equal(saved.enabled, false)
+
+  // unknown ids are ignored (no corrupt state)
+  background.setBackgroundId('totally-not-a-loop')
+  assert.equal(background.getBackground().id, 'aurora')
+
+  stop()
+  const before = hits
+  background.setBackgroundId('none')
+  assert.equal(hits, before, 'unsubscribed listener must not fire')
+  assert.equal(background.getBackground().id, 'none')
 })
 
 // ---- summary ----

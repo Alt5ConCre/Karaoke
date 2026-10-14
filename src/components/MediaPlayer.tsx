@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import type { Song } from '../types.ts'
 import { useMediaLibrary } from '../state/useMediaLibrary.ts'
-import { extensionOf, isKaraokeMidiExt } from '../lib/mediaTypes.ts'
+import { extensionOf, isAudioFile, isKaraokeMidiExt } from '../lib/mediaTypes.ts'
 import { YouTubePlayer } from './YouTubePlayer.tsx'
 import { AddLocalMediaBox } from './AddLocalMediaBox.tsx'
 import { MidiKaraokePlayer } from './MidiKaraokePlayer.tsx'
+import { BackgroundVideo } from './BackgroundVideo.tsx'
 
 interface MediaPlayerProps {
   song: Song
@@ -76,6 +77,7 @@ export function MediaPlayer({ song, videoId, heading, variant = 'card', onEnded,
         heading={heading}
         variant={variant}
         source="file"
+        audioOnly={isAudioFile({ name: meta.name ?? '', type: meta.type })}
         onEnded={onEnded}
         autoPlay={autoPlay}
       />
@@ -103,6 +105,7 @@ export function MediaPlayer({ song, videoId, heading, variant = 'card', onEnded,
         heading={heading}
         variant={variant}
         source={song.source === 'ultrastar' ? 'ultrastar' : 'folder'}
+        audioOnly={isAudioFile({ name: song.mediaUrl })}
         onEnded={onEnded}
         autoPlay={autoPlay}
       />
@@ -130,6 +133,8 @@ interface LocalMediaPlayerProps {
   heading?: string
   variant: 'room' | 'card'
   source: 'file' | 'folder' | 'ultrastar'
+  /** Audio-only files carry no picture, so the background shows through. */
+  audioOnly?: boolean
   onEnded?: () => void
   autoPlay?: boolean
 }
@@ -140,6 +145,7 @@ function LocalMediaPlayer({
   heading,
   variant,
   source,
+  audioOnly = false,
   onEnded,
   autoPlay,
 }: LocalMediaPlayerProps) {
@@ -147,8 +153,9 @@ function LocalMediaPlayer({
     <div className={`player player--${variant} player--local`}>
       {heading && <p className="player__heading">{heading}</p>}
       <div className="player__frame">
+        <BackgroundVideo />
         <video
-          className="player__video"
+          className={`player__video${audioOnly ? ' player__video--audio' : ''}`}
           src={src}
           poster={song.coverUrl}
           controls

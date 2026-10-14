@@ -4,6 +4,7 @@ import type { Song } from '../types.ts'
 import { parseMidiKaraoke } from '../lib/midi.ts'
 import type { MidiSong } from '../lib/midi.ts'
 import { KaraokeMidiPlayer } from '../lib/midiSynth.ts'
+import { BackgroundVideo } from './BackgroundVideo.tsx'
 
 interface MidiKaraokePlayerProps {
   /** Object URL of the local file, or the mediaUrl of a Songs/ library track. */
@@ -143,6 +144,7 @@ export function MidiKaraokePlayer({
     <div className={`midi-player midi-player--${variant}`}>
       {heading && <p className="midi-player__heading">{heading}</p>}
       <div className="midi-player__screen" aria-live="polite">
+        <BackgroundVideo />
         {status === 'loading' && <p className="midi-player__hint">Reading MIDI track…</p>}
 
         {status === 'error' && (

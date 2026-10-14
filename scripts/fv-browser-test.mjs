@@ -26,6 +26,7 @@ const MIME = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
   '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon',
   '.json': 'application/json', '.map': 'application/json',
+  '.mp4': 'video/mp4', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
 }
 const server = createServer(async (req, res) => {
   try {
@@ -337,6 +338,28 @@ await test('mode toggle switches rotation ↔ queue in the UI', async () => {
   assertTrue(footnote.includes('Strict first-come'), footnote)
 })
 
+await test('background picker: lists loops (incl. nature + animated) and remembers the choice', async () => {
+  await waitFor(A, `__qs('.bg-picker')`, 'background picker on the stage')
+  const swatches = await evalJs(A, `__qsa('.bg-swatch').length`)
+  // one "None" tile plus the built-in loops
+  assertTrue(swatches >= 6, `expected None + >=5 loops, got ${swatches}`)
+  const names = await evalJs(A, `__qsa('.bg-swatch[title]').map((b) => b.title).join('|')`)
+  assertTrue(/Aurora/.test(names), names)
+  assertTrue(/Forest|Desert|Cloud/.test(names), `needs a nature loop: ${names}`)
+  assertTrue(/Tunnel|Deep|Nebula/.test(names), `needs an animated/3D loop: ${names}`)
+  // Selecting a loop marks it active and persists the choice.
+  await evalJs(A, `__qsa('.bg-swatch').find((b) => b.title === 'Aurora').click()`)
+  await waitFor(
+    A,
+    `(__qsa('.bg-swatch.is-active')[0] || {}).title === 'Aurora'`,
+    'Aurora marked selected',
+  )
+  const saved = await evalJs(A, `JSON.parse(localStorage.getItem('fv:background') || '{}').id`)
+  assertTrue(saved === 'aurora', `persisted background id = ${saved}`)
+  const dim = await evalJs(A, `Number(__qs('.bg-picker__dim input').value)`)
+  assertTrue(dim > 0 && dim <= 0.85, `dim slider value = ${dim}`)
+})
+
 const CARD_BY_TITLE = (t) => `
   [...document.querySelectorAll('.song-card')]
     .find((c) => c.querySelector('.song-card__title').innerText.includes(${JSON.stringify(t)}))
@@ -413,6 +436,28 @@ await test('responsive: no horizontal overflow at phone and desktop sizes', asyn
 const C = await newTab(`${BASE}/`)
 await evalJs(C, HELPERS)
 
+// Pre-select a background loop so the local MIDI player must render it behind
+// the lyrics (local songs are the only ones that get a background).
+await evalJs(
+  C,
+  `localStorage.setItem('fv:background', JSON.stringify({ id: 'aurora', enabled: true, dim: 0.45 }))`,
+)
+await evalJs(C, `location.reload()`)
+await tick(700)
+await evalJs(C, HELPERS)
+
+/** Attach a real file to the "Choose files" input via CDP (no drag-and-drop). */
+async function setDeviceFile(page, filePath) {
+  await page.send('DOM.enable')
+  const doc = await page.send('DOM.getDocument')
+  const q = await page.send('DOM.querySelector', {
+    nodeId: doc.root.nodeId,
+    selector: 'input[aria-label="Choose video or audio files from this device"]',
+  })
+  assertTrue(q.nodeId > 0, 'must find the files input node')
+  await page.send('DOM.setFileInputFiles', { nodeId: q.nodeId, files: [filePath] })
+}
+
 await test('add-song: form adds a custom song, then Remove takes it back', async () => {
   await waitFor(C, `__qsa('.song-card').length === 13`, 'full catalog on C')
   await evalJs(C, `__qs('.add-song .panel__head button').click()`)
@@ -456,14 +501,7 @@ await test('add-song: a .kar file previews through the MIDI karaoke player', asy
   const karPath = path.join(karDir, 'Full Sample Song.kar')
   await writeFile(karPath, buildKarFixture())
 
-  await C.send('DOM.enable')
-  const doc = await C.send('DOM.getDocument')
-  const q = await C.send('DOM.querySelector', {
-    nodeId: doc.root.nodeId,
-    selector: 'input[aria-label="Choose video or audio files from this device"]',
-  })
-  assertTrue(q.nodeId > 0, 'must find the files input node')
-  await C.send('DOM.setFileInputFiles', { nodeId: q.nodeId, files: [karPath] })
+  await setDeviceFile(C, karPath)
 
   try {
     await waitFor(C, `__qsa('.song-card').length === 14`, 'kar card added')
@@ -498,6 +536,34 @@ await test('add-song: a .kar file previews through the MIDI karaoke player', asy
       midiText.includes('lo'),
     `midi player text = ${midiText}`,
   )
+
+  // The pre-selected background must run, muted and looping, behind the lyrics
+  // (z-index 0, lyrics lifted above it).
+  const bg = await evalJs(
+    C,
+    `(() => {
+       const screen = (${CARD_BY_TITLE('Full Sample Song')}).querySelector('.midi-player__screen');
+       const layer = screen && screen.querySelector('.bgvideo');
+       const v = layer && layer.querySelector('.bgvideo__el');
+       const lyrics = screen && screen.querySelector('.midi-player__lyrics');
+       if (!v) return { present: false };
+       return {
+         present: true,
+         src: v.getAttribute('src') || v.src,
+         muted: v.muted,
+         loop: v.loop,
+         zLayer: getComputedStyle(layer).zIndex,
+         zLyrics: lyrics ? getComputedStyle(lyrics).zIndex : null,
+       };
+     })()`,
+  )
+  assertTrue(bg.present, 'background layer must render in the MIDI screen')
+  assertTrue(bg.src.includes('/backgrounds/aurora.mp4'), `bg src = ${bg.src}`)
+  assertTrue(bg.muted === true, 'background must be muted')
+  assertTrue(bg.loop === true, 'background must loop')
+  assertTrue(bg.zLayer === '0', `bg layer z-index = ${bg.zLayer}`)
+  assertTrue(Number(bg.zLyrics) >= 1, `lyrics must sit above the bg, z = ${bg.zLyrics}`)
+
   await evalJs(
     C,
     `(() => {

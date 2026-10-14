@@ -4,6 +4,7 @@ import { useRoom } from '../state/useRoom.ts'
 import { useVideoLibrary } from '../state/useVideoLibrary.ts'
 import { useMediaLibrary } from '../state/useMediaLibrary.ts'
 import { MediaPlayer } from './MediaPlayer.tsx'
+import { BackgroundPicker } from './BackgroundPicker.tsx'
 import { ScorePanel } from './Leaderboard.tsx'
 import { ScoreReveal } from './ScoreReveal.tsx'
 
@@ -113,6 +114,8 @@ export function NowSingingPanel() {
             </button>
           </div>
         ))}
+
+      <BackgroundPicker />
 
       <ScorePanel score={latestScore} />
 
