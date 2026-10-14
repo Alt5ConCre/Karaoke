@@ -86,7 +86,7 @@ const { createLocalAdapter, listLocalRoomCodes, deleteLocalRoom } = await import
 const mediaTypes = await import(url('lib/mediaTypes.ts'))
 const customSongs = await import(url('lib/customSongs.ts'))
 const midi = await import(url('lib/midi.ts'))
-const { buildKarFixture, buildPlainMidi, buildSmpteMidi } = await import('./fv-midi-fixture.mjs')
+const { buildKarFixture, buildPlainMidi, buildSmpteMidi, buildRealisticKarFixture } = await import('./fv-midi-fixture.mjs')
 
 // ================================ ids =====================================
 await test('normalizeRoomCode: uppercases, strips symbols, slices to 5', () => {
@@ -452,6 +452,24 @@ await test('parseMidiKaraoke: SMPTE time division converts ticks to seconds', ()
   assert.equal(song.ticksPerQuarter, null)
   // 25 fps × 40 tpf = 1000 ticks/s → 48 ticks = 48 ms
   assert.ok(Math.abs(song.notes[0].endSec - 0.048) < 1e-6, `got ${song.notes[0].endSec}`)
+})
+
+await test('parseMidiKaraoke: CR line breaks split lines, duplicate lyric track dedupes', () => {
+  const song = midi.parseMidiKaraoke(buildRealisticKarFixture())
+  assert.ok(song)
+  assert.equal(song.isKar, true, 'banner present')
+  assert.equal(song.format, 1)
+  // CR (0x0d) line breaks — not the `\`/`/` markup — must still split lines.
+  assert.deepEqual(
+    song.lines.map((l) => l.text),
+    ['Hello', 'World'],
+  )
+  // the byte-identical second lyric track must not double every syllable
+  assert.deepEqual(
+    song.syllables.map((s) => s.text),
+    ['Hel', 'lo ', 'Wo', 'rld'],
+  )
+  assert.ok(Math.abs(song.durationSec - 1.0) < 1e-6, `duration ~1s, got ${song.durationSec}`)
 })
 
 // ---- summary ----

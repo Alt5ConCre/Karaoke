@@ -39,6 +39,23 @@ function buildMidi({ division = 96, tempo = 500000, events }) {
   return new Uint8Array([...MThd, ...u32(6), ...u16(0), ...u16(1), ...u16(division), ...track])
 }
 
+/**
+ * Build a format-1 SMF from several independent tracks. Tempo meta (0x51) is
+ * emitted first in track 0; every track gets the end-of-track meta.
+ */
+function buildMidiMulti({ division = 96, tempo = 500000, tracks }) {
+  const chunks = tracks.map((bytes, i) => {
+    const body = []
+    if (i === 0) body.push(0x00, 0xff, 0x51, 0x03, (tempo >> 16) & 0xff, (tempo >> 8) & 0xff, tempo & 0xff)
+    for (const b of bytes) body.push(b)
+    body.push(0x00, 0xff, 0x2f, 0x00) // end of track
+    return [...MTrk, ...u32(body.length), ...body]
+  })
+  return new Uint8Array([
+    ...MThd, ...u32(6), ...u16(1), ...u16(tracks.length), ...u16(division), ...chunks.flat(),
+  ])
+}
+
 function metaText(type, str) {
   const b = asciiBytes(str)
   return [0x00, 0xff, type, ...vlq(b.length), ...b]
@@ -85,6 +102,30 @@ export function buildKarFixture() {
   }
   events.push(lyric('\\'))
   return buildMidi({ tempo: 500000, events })
+}
+
+/**
+ * A realistic .kar shaped like the real library: a KMIDI banner in track 0,
+ * lyrics in a 0x05 track using blank + CR line breaks (not `\`/`/`), and a
+ * byte-identical SECOND lyric track — the duplicate many karaoke files ship.
+ * Expected: two lines ("Hello", "World"), each syllable counted once.
+ */
+export function buildRealisticKarFixture() {
+  const banner = '\x00@KMIDI KARAOKE FILE\x00 [9:0]\r\n@TRealistic Song\r\n@LEnglish\r\n@WTest Artist\r\n'
+  const lyr = (str, delta = 0) => [...vlq(delta), 0xff, 0x05, ...vlq(asciiBytes(str).length), ...asciiBytes(str)]
+  const note = ({ key, len = 48 }) => [0x00, 0x90, key, 0x50, ...vlq(len), key, 0x00]
+  const lyricTrack = [
+    ...lyr('Hel'), ...note({ key: 60 }),
+    ...lyr('lo '), ...note({ key: 62 }),
+    ...lyr(''), ...lyr('\r'),
+    ...lyr('Wo'), ...note({ key: 64 }),
+    ...lyr('rld'), ...note({ key: 65 }),
+    ...lyr('\r'),
+  ]
+  return buildMidiMulti({
+    tempo: 500000,
+    tracks: [metaText(0x01, banner), lyricTrack, [...lyricTrack]],
+  })
 }
 
 /** No karaoke banner, no lyrics — a bare instrumental. Tempo 128 bpm. */

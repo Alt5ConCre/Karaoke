@@ -26,7 +26,7 @@ export function AddLocalMediaBox({ songId, label }: AddLocalMediaBoxProps) {
     event.target.value = ''
     if (!file) return
     if (!isPlayableMedia(file)) {
-      setError('That file type cannot play here. Try MP4, WebM, MKV, MOV, MP3, M4A, OGG, WAV or FLAC.')
+      setError('That file type cannot play here. Try MP4, WebM, MKV, MOV, MP3, M4A, OGG, WAV, FLAC or a MIDI karaoke file (.kar, .mid, .midi).')
       return
     }
     try {

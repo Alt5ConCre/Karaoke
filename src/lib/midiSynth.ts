@@ -6,11 +6,24 @@
  * The browser cannot play `.kar`/`.mid`/`.midi` natively, so this is the "play
  * engine" behind the MIDI karaoke player. Volume shaping is crude on purpose —
  * it is a videoke toy, not a General MIDI module.
+ *
+ * Scheduling is windowed: only the notes falling inside a short look-ahead
+ * horizon are handed to Web Audio at a time, and a timer keeps topping the
+ * horizon up as playback advances. A real karaoke track holds thousands of
+ * notes (often 5k–24k); scheduling all of them at once means tens of thousands
+ * of live oscillators, which stalls the audio thread and makes the song appear
+ * not to play at all. The window keeps the live node count in the hundreds no
+ * matter how long the song is.
  */
 
 import type { MidiSong } from './midi.ts'
 
 type OscType = OscillatorType
+
+/** How far ahead, in song seconds, notes are scheduled each pump. */
+const LOOKAHEAD_SEC = 2.5
+/** How often the look-ahead pump runs, in milliseconds. */
+const PUMP_INTERVAL_MS = 200
 
 interface Timbre {
   wave: OscType
@@ -41,6 +54,12 @@ export function timbreForProgram(program: number): Timbre {
 
 const NOTE_FREQ = (key: number): number => 440 * Math.pow(2, (key - 69) / 12)
 
+/** A source node we can stop/disconnect when playback is cut. */
+interface ScheduledVoice {
+  node: AudioScheduledSourceNode
+  stopAt: number
+}
+
 export class KaraokeMidiPlayer {
   onended: (() => void) | null = null
 
@@ -48,12 +67,16 @@ export class KaraokeMidiPlayer {
   private master: GainNode | null = null
   private noise: AudioBuffer | null = null
   private programByChannel = new Map<number, number>()
-  private scheduled: Array<{ stopAt: number }> = []
-  private startCtxTime = 0
+  private scheduled: ScheduledVoice[] = []
+  /** Song position, in seconds, that `anchorCtxTime` maps to. */
+  private anchorSongSec = 0
+  private anchorCtxTime = 0
+  /** Index of the next note (in `song.notes`, ordered by startSec) to schedule. */
+  private cursor = 0
   private pausedAt = 0
   private playing = false
   private volume = 0.8
-  private endTimer: ReturnType<typeof setInterval> | null = null
+  private pumpTimer: ReturnType<typeof setInterval> | null = null
 
   private song: MidiSong
 
@@ -69,9 +92,8 @@ export class KaraokeMidiPlayer {
   }
 
   get currentTime(): number {
-    if (!this.ctx) return 0
-    if (!this.playing) return this.pausedAt
-    return this.pausedAt + (this.ctx.currentTime - this.startCtxTime)
+    if (!this.ctx || !this.playing) return this.pausedAt
+    return this.anchorSongSec + (this.ctx.currentTime - this.anchorCtxTime)
   }
 
   get isPlaying(): boolean {
@@ -107,28 +129,31 @@ export class KaraokeMidiPlayer {
     if (this.playing) return true
     if (ctx.state === 'suspended') {
       void ctx.resume()
-      // Keep the button in the "paused" state; resume() resolves asynchronously
-      // and the block only lifts on a real gesture anyway.
+      // resume() resolves asynchronously; the block only lifts on a real
+      // gesture, and the notes we schedule below start once it does.
     }
-    this.scheduleFrom(this.pausedAt)
-    this.startCtxTime = ctx.currentTime
+    this.anchorSongSec = this.pausedAt
+    this.anchorCtxTime = ctx.currentTime
+    this.cursor = this.firstNoteEndingAfter(this.pausedAt)
     this.playing = true
-    this.startEndTimer()
-    return ctx.state === 'running' || ctx.state === 'suspended'
+    this.pump()
+    this.startPump()
+    return true
   }
 
   pause(): void {
     if (!this.playing) return
     this.pausedAt = this.currentTime
     this.playing = false
-    this.stopEndTimer()
+    this.stopPump()
+    this.cutAll()
   }
 
   stop(): void {
-    this.cutAll()
     this.playing = false
     this.pausedAt = 0
-    this.stopEndTimer()
+    this.stopPump()
+    this.cutAll()
   }
 
   seek(seconds: number): void {
@@ -136,8 +161,10 @@ export class KaraokeMidiPlayer {
     this.cutAll()
     this.pausedAt = target
     if (this.playing && this.ctx) {
-      this.startCtxTime = this.ctx.currentTime
-      this.scheduleFrom(target)
+      this.anchorSongSec = target
+      this.anchorCtxTime = this.ctx.currentTime
+      this.cursor = this.firstNoteEndingAfter(target)
+      this.pump()
     }
   }
 
@@ -162,19 +189,52 @@ export class KaraokeMidiPlayer {
     return this.programByChannel.get(channel) ?? 0
   }
 
-  private scheduleFrom(offsetSec: number): void {
-    const ctx = this.ensureCtx()
-    if (!this.noise || !this.master) return
+  /** Index of the first note still sounding at `sec` (notes ordered by startSec). */
+  private firstNoteEndingAfter(sec: number): number {
+    const notes = this.song.notes
+    let i = 0
+    while (i < notes.length && notes[i].endSec <= sec) i++
+    return i
+  }
+
+  /**
+   * Look-ahead pump. Hands Web Audio only the notes inside the next
+   * `LOOKAHEAD_SEC` window, then prunes voices that have already finished, so
+   * the live node count stays bounded however long the song is.
+   */
+  private pump(): void {
+    const ctx = this.ctx
+    if (!ctx || !this.master || !this.noise || !this.playing) return
     const now = ctx.currentTime
-    for (const note of this.song.notes) {
-      const start = Math.max(note.startSec, offsetSec)
+    const songNow = this.anchorSongSec + (now - this.anchorCtxTime)
+    const horizon = songNow + LOOKAHEAD_SEC
+    const notes = this.song.notes
+    while (this.cursor < notes.length && notes[this.cursor].startSec <= horizon) {
+      const note = notes[this.cursor]
+      this.cursor += 1
+      const start = Math.max(note.startSec, songNow)
       if (start >= note.endSec) continue
-      const nodeTime = now + (start - offsetSec)
+      const nodeTime = Math.max(this.anchorCtxTime + (start - this.anchorSongSec), now)
       const dur = note.endSec - start
       const program = this.programAt(note.channel)
       if (note.channel === 9) this.scheduleDrum(nodeTime, note.key, note.velocity, dur)
       else this.scheduleTone(nodeTime, note.key, note.velocity, dur, program)
     }
+    this.prune(now)
+    if (this.currentTime >= this.duration) this.finish()
+  }
+
+  private prune(now: number): void {
+    if (this.scheduled.length === 0) return
+    this.scheduled = this.scheduled.filter((voice) => voice.stopAt > now)
+  }
+
+  private finish(): void {
+    this.playing = false
+    this.pausedAt = this.duration
+    this.stopPump()
+    this.cutAll()
+    this.onended?.()
   }
 
   private envelope(gain: GainNode, nodeTime: number, peak: number, dur: number, timbre: Timbre): void {
@@ -213,7 +273,7 @@ export class KaraokeMidiPlayer {
     osc.start(nodeTime)
     const stopAt = nodeTime + Math.max(dur, timbre.attack + 0.01) + 0.05
     osc.stop(stopAt)
-    this.scheduled.push({ stopAt })
+    this.scheduled.push({ node: osc, stopAt })
 
     if (timbre.detune) {
       const second = ctx.createOscillator()
@@ -234,7 +294,7 @@ export class KaraokeMidiPlayer {
       gain2.connect(master)
       second.start(nodeTime)
       second.stop(stopAt)
-      this.scheduled.push({ stopAt })
+      this.scheduled.push({ node: second, stopAt })
     }
   }
 
@@ -255,7 +315,7 @@ export class KaraokeMidiPlayer {
     gain.connect(master)
     source.start(nodeTime)
     source.stop(nodeTime + dur)
-    this.scheduled.push({ stopAt: nodeTime + dur })
+    this.scheduled.push({ node: source, stopAt: nodeTime + dur })
   }
 
   private drumTone(nodeTime: number, freq: number, freqEnd: number, dur: number, peak: number): void {
@@ -273,7 +333,7 @@ export class KaraokeMidiPlayer {
     gain.connect(master)
     osc.start(nodeTime)
     osc.stop(nodeTime + dur)
-    this.scheduled.push({ stopAt: nodeTime + dur })
+    this.scheduled.push({ node: osc, stopAt: nodeTime + dur })
   }
 
   private scheduleDrum(nodeTime: number, key: number, velocity: number, dur: number): void {
@@ -325,35 +385,33 @@ export class KaraokeMidiPlayer {
 
   private cutAll(): void {
     const ctx = this.ctx
-    if (!ctx || !this.master) return
-    const t = ctx.currentTime
-    for (const node of this.scheduled) {
-      if (node.stopAt > t) {
-        this.master.gain.cancelScheduledValues(t)
-        this.master.gain.setValueAtTime(this.volume, t)
+    const t = ctx ? ctx.currentTime : 0
+    for (const { node, stopAt } of this.scheduled) {
+      if (stopAt > t) {
+        try {
+          node.stop(t)
+        } catch {
+          // Already stopped — nothing to cut.
+        }
+      }
+      try {
+        node.disconnect()
+      } catch {
+        // Already disconnected — nothing to cut.
       }
     }
     this.scheduled = []
   }
 
-  private startEndTimer(): void {
-    if (this.endTimer) return
-    this.endTimer = setInterval(() => {
-      if (!this.playing || this.song.notes.length === 0) return
-      if (this.currentTime >= this.duration) {
-        this.playing = false
-        this.pausedAt = this.duration
-        this.stopEndTimer()
-        this.cutAll()
-        this.onended?.()
-      }
-    }, 200)
+  private startPump(): void {
+    if (this.pumpTimer) return
+    this.pumpTimer = setInterval(() => this.pump(), PUMP_INTERVAL_MS)
   }
 
-  private stopEndTimer(): void {
-    if (this.endTimer) {
-      clearInterval(this.endTimer)
-      this.endTimer = null
+  private stopPump(): void {
+    if (this.pumpTimer) {
+      clearInterval(this.pumpTimer)
+      this.pumpTimer = null
     }
   }
 }

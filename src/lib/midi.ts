@@ -64,6 +64,19 @@ export interface MidiSong {
 /** Tempo (µs per quarter note) Blender-ish default when no tempo meta exists. */
 export const DEFAULT_MICROSECONDS_PER_QUARTER = 500_000
 
+/** A karaoke song is never longer than this; anything beyond is a broken file. */
+const MAX_SONG_SEC = 15 * 60
+/** A silence longer than this between notes is junk appended after the song. */
+const GAP_TRIM_SEC = 30
+
+type TextKind = 'lyric' | 'text' | 'trackName'
+interface TextEvent {
+  tick: number
+  text: string
+  kind: TextKind
+  track: number
+}
+
 const KARAOKE_BANNER_RE = /KMIDI KARAOKE/i
 /** @K is the KMIDI banner pseudo-tag, not user metadata. */
 const KARAOKE_TAG_KEYS = new Set(['T', 'L', 'W', 'V', 'C', 'M', 'R', 'G', 'I', 'H', 'E'])
@@ -104,7 +117,7 @@ export function parseMidiKaraoke(bytes: Uint8Array): MidiSong | null {
   }
 
   let offset = 14
-  const tracks: { text: { tick: number; text: string }[]; notes: RawNote[]; programChanges: MidiProgramChange[]; tempos: { tick: number; spq: number }[]; lastTick: number }[] = []
+  const tracks: { text: TextEvent[]; notes: RawNote[]; programChanges: MidiProgramChange[]; tempos: { tick: number; spq: number }[]; lastTick: number }[] = []
 
   for (let t = 0; t < trackCount; t++) {
     if (offset + 8 > bytes.byteLength) break
@@ -113,7 +126,7 @@ export function parseMidiKaraoke(bytes: Uint8Array): MidiSong | null {
     const trackEnd = offset + 8 + trackLen
     if (trackEnd > bytes.byteLength) break
     const events = {
-      text: [] as { tick: number; text: string }[],
+      text: [] as TextEvent[],
       notes: [] as RawNote[],
       programChanges: [] as MidiProgramChange[],
       tempos: [] as { tick: number; spq: number }[],
@@ -123,51 +136,62 @@ export function parseMidiKaraoke(bytes: Uint8Array): MidiSong | null {
     let running = -1
     let absTick = 0
     while (pos < trackEnd) {
-      let [delta, next] = readVlq(bytes, pos)
+      const [delta, next] = readVlq(bytes, pos)
       pos = next
       absTick += delta // deltas accumulate; MIDI timestamps are relative
-      const status = bytes[pos]
+      if (pos >= trackEnd) break
+      let status = bytes[pos]
       if (status & 0x80) {
-        running = status
         pos++
-      } else if (running === -1) {
+        // Only channel messages set running status. Meta (0xFF) and SysEx
+        // (0xF0/0xF7) leave it untouched — otherwise a data-byte event after a
+        // meta or SysEx event (a lyric line, say) is misread and the whole
+        // track desyncs, producing absurd timings.
+        if (status < 0xf0) running = status
+      } else if (running !== -1) {
+        status = running
+      } else {
         break
       }
-      const cmd = running & 0xf0
-      const chan = running & 0x0f
-      if (running === 0xff) {
+      if (status === 0xff) {
         const metaType = bytes[pos++]
         const [len, after] = readVlq(bytes, pos)
         pos = after
         if (metaType === 0x01 || metaType === 0x05 || metaType === 0x03) {
-          events.text.push({ tick: absTick, text: decodeText(bytes, pos, len) })
+          const kind: TextKind = metaType === 0x05 ? 'lyric' : metaType === 0x03 ? 'trackName' : 'text'
+          events.text.push({ tick: absTick, text: decodeText(bytes, pos, len), kind, track: t })
         } else if (metaType === 0x51 && len >= 3) {
           const spq = (bytes[pos] << 16) | (bytes[pos + 1] << 8) | bytes[pos + 2]
           if (spq > 0) events.tempos.push({ tick: absTick, spq })
         }
         pos += len
-      } else if (running === 0xf0 || running === 0xf7) {
-        const [, after] = readVlq(bytes, pos)
-        pos = after
+      } else if (status === 0xf0 || status === 0xf7) {
+        // SysEx — skip the whole payload, not just its length prefix.
+        const [len, after] = readVlq(bytes, pos)
+        pos = after + len
         continue
-      } else if (cmd === 0x80 || (cmd === 0x90 && bytes[pos + 1] === 0)) {
-        // note off — must precede the 0x90 note-on branch or running-status
-        // 0x90/vel-0 messages are swallowed as (useless) zero-velocity note-ons
-        const key = bytes[pos]
-        pos += 2
-        events.notes.push({ channel: chan, key, velocity: 0, endTick: absTick })
-      } else if (cmd === 0x90) {
-        const key = bytes[pos]
-        const vel = bytes[pos + 1]
-        pos += 2
-        events.notes.push({ channel: chan, key, velocity: vel, startTick: absTick })
-      } else if (cmd === 0xc0) {
-        events.programChanges.push({ channel: chan, tick: absTick, program: bytes[pos] })
-        pos += 1
-      } else if (cmd === 0xd0) {
-        pos += 1
       } else {
-        pos += 2
+        const cmd = status & 0xf0
+        const chan = status & 0x0f
+        if (cmd === 0x80 || (cmd === 0x90 && bytes[pos + 1] === 0)) {
+          // note off — must precede the 0x90 note-on branch or running-status
+          // 0x90/vel-0 messages are swallowed as (useless) zero-velocity note-ons
+          const key = bytes[pos]
+          pos += 2
+          events.notes.push({ channel: chan, key, velocity: 0, endTick: absTick })
+        } else if (cmd === 0x90) {
+          const key = bytes[pos]
+          const vel = bytes[pos + 1]
+          pos += 2
+          events.notes.push({ channel: chan, key, velocity: vel, startTick: absTick })
+        } else if (cmd === 0xc0) {
+          events.programChanges.push({ channel: chan, tick: absTick, program: bytes[pos] })
+          pos += 1
+        } else if (cmd === 0xd0) {
+          pos += 1
+        } else {
+          pos += 2
+        }
       }
       events.lastTick = Math.max(events.lastTick, absTick)
     }
@@ -175,7 +199,7 @@ export function parseMidiKaraoke(bytes: Uint8Array): MidiSong | null {
     offset = trackEnd
   }
 
-  const allText: { tick: number; text: string }[] = []
+  const allText: TextEvent[] = []
   const allNotesRaw: RawNote[] = []
   const allPrograms: MidiProgramChange[] = []
   const tempos: { tick: number; spq: number }[] = []
@@ -191,13 +215,23 @@ export function parseMidiKaraoke(bytes: Uint8Array): MidiSong | null {
   tempos.sort((a, b) => a.tick - b.tick)
   if (tempos.length === 0 || tempos[0].tick > 0) tempos.unshift({ tick: 0, spq: DEFAULT_MICROSECONDS_PER_QUARTER })
 
-  const isKar = allText.some((m) => KARAOKE_BANNER_RE.test(m.text))
-
   const tickToSec = makeTickToSec(secPerTick, division, ticksPerQuarter, tempos)
 
-  const { lines, syllables } = buildLyrics(allText, tickToSec, isKar)
+  // Karaoke files carry lyrics either as Lyric meta events (0x05) or — in the
+  // classic .kar files — as plain Text events (0x01) split by `\` / `/` markers.
+  // Trusting the banner alone made most of the library look instrumental.
+  const lyricEvents = selectLyricEvents(allText)
+  const isKar = allText.some((m) => KARAOKE_BANNER_RE.test(m.text)) || lyricEvents.length > 0
+
+  const { lines, syllables, lastLyricTick } = buildLyrics(lyricEvents, tickToSec)
   const meta = extractTags(allText)
-  const durationSec = tickToSec(lastTick)
+  // Duration from the actual note/lyric data, not from the last event of every
+  // track — marker and metadata tracks routinely stretch far past the music.
+  const durationSec = computeDuration(allNotesRaw, lastLyricTick, tickToSec, lastTick)
+  if (syllables.length) {
+    syllables[syllables.length - 1].endSec = durationSec
+    lines[lines.length - 1].endSec = durationSec
+  }
 
   const notes = resolveNotes(allNotesRaw, tickToSec)
 
@@ -284,74 +318,123 @@ function extractTags(texts: { tick: number; text: string }[]): { title: string; 
   }
 }
 
-function buildLyrics(texts: { tick: number; text: string }[], tickToSec: (tick: number) => number, isKar: boolean): { lines: MidiLine[]; syllables: MidiSyllable[] } {
-  const dummies: { text: string; startSec: number; startTick: number }[] = []
-  const tagRe = /@[A-Za-z][^@\r\n]*/g
-  for (const { tick, text } of texts) {
-    if (!isKar) continue
-    const clean = text.replace(tagRe, '')
-    let current = ''
-    let lineSyllables: { text: string; startSec: number; startTick: number }[] = []
-    const flush = () => {
-      const trimmed = current.trim()
-      if (trimmed) lineSyllables.push({ text: trimmed, startSec: tickToSec(tick), startTick: tick })
-      current = ''
-    }
-    const commitLine = () => {
-      if (lineSyllables.length) {
-        dummies.push(...lineSyllables)
-        lineSyllables = []
-      }
-    }
-    for (const ch of clean) {
-      const code = ch.charCodeAt(0)
-      if (ch === '\\') {
-        flush()
-        commitLine()
-      } else if (ch === '/') {
-        flush()
-      } else if (code < 0x20 && code !== 0x09) {
-        // NUL (common at the top of a KMIDI banner) and other control chars are separators; tab is kept.
-      } else {
-        current += ch
-      }
-    }
-    flush()
-    commitLine()
-  }
-
-  const flat: MidiSyllable[] = []
-  for (let i = 0; i < dummies.length; i++) {
-    const s = dummies[i]
-    const next = dummies[i + 1]
-    const endSec = next ? next.startSec : Number.MAX_SAFE_INTEGER
-    flat.push({ text: s.text, startSec: s.startSec, endSec, startTick: s.startTick })
-  }
-
-  return { lines: groupFlat(flat), syllables: flat }
+/** Strip `@T`/`@L`-style karaoke tags out of a text event. */
+function stripTags(text: string): string {
+  return text.replace(/@[A-Za-z][^@\r\n]*/g, '')
 }
 
-function groupFlat(flat: MidiSyllable[]): MidiLine[] {
+/**
+ * Pick the events that actually carry lyrics. Lyric meta events (0x05) win when
+ * present; otherwise fall back to Text events (0x01) that use kar-style markup
+ * (`\`, `/`, NUL or CR/LF line breaks) — the shape old .kar files put their
+ * words in.
+ *
+ * Empty events are dropped but whitespace-only ones are kept: a lone `"\r"` is
+ * how most .kar files encode a line break, and trimming it away would collapse
+ * the whole song onto one line.
+ *
+ * Karaoke files often ship the same lyric track twice (a display copy and an
+ * identical duplicate). Only the track with the most lyric events is read, so
+ * those files don't come back with every syllable doubled.
+ */
+function selectLyricEvents(allText: TextEvent[]): TextEvent[] {
+  const lyric = allText.filter((t) => t.kind === 'lyric' && t.text !== '')
+  if (lyric.length) return mostPopulatedTrack(lyric)
+  const text = allText.filter((t) => t.kind === 'text' && !/^[\s\0]*@/.test(t.text))
+  const looksKar = text.some((t) => /[\\/\r\n\0]/.test(t.text))
+  return looksKar ? mostPopulatedTrack(text) : []
+}
+
+/** Keep the single track carrying the most events, then order by time. */
+function mostPopulatedTrack(events: TextEvent[]): TextEvent[] {
+  const counts = new Map<number, number>()
+  for (const e of events) counts.set(e.track, (counts.get(e.track) ?? 0) + 1)
+  let best = events[0].track
+  for (const [track, n] of counts) if (n > (counts.get(best) ?? 0)) best = track
+  return events.filter((e) => e.track === best).sort((a, b) => a.tick - b.tick)
+}
+
+function buildLyrics(events: TextEvent[], tickToSec: (tick: number) => number): { lines: MidiLine[]; syllables: MidiSyllable[]; lastLyricTick: number } {
   const lines: MidiLine[] = []
-  let current: MidiSyllable[] = []
-  for (const s of flat) {
-    if (current.length && s.startTick !== current[current.length - 1].startTick) {
-      lines.push(makeLine(current))
-      current = []
+  const flat: MidiSyllable[] = []
+  let lineSyls: MidiSyllable[] = []
+  let buf = ''
+  let lastLyricTick = 0
+  const flushSyl = (tick: number) => {
+    if (buf.trim()) {
+      lineSyls.push({ text: buf, startSec: tickToSec(tick), endSec: Number.MAX_SAFE_INTEGER, startTick: tick })
+      lastLyricTick = Math.max(lastLyricTick, tick)
     }
-    current.push(s)
+    buf = ''
   }
-  if (current.length) lines.push(makeLine(current))
-  return lines
+  const commitLine = () => {
+    if (lineSyls.length) {
+      flat.push(...lineSyls)
+      lines.push({
+        text: lineSyls.map((s) => s.text).join('').replace(/\s+/g, ' ').trim(),
+        syllables: lineSyls,
+        startSec: lineSyls[0].startSec,
+        endSec: Number.MAX_SAFE_INTEGER,
+      })
+      lineSyls = []
+    }
+  }
+  for (const ev of events) {
+    for (const ch of stripTags(ev.text)) {
+      const code = ch.charCodeAt(0)
+      // `\` and `/` are the classic .kar line/syllable markers; CR/LF/NUL are
+      // what most files actually use. None of them break on event boundaries —
+      // one syllable per event simply accumulates into the current line.
+      if (ch === '\\' || ch === '/' || code === 0x0d || code === 0x0a || code === 0x00) {
+        flushSyl(ev.tick)
+        commitLine()
+      } else {
+        buf += ch
+      }
+    }
+    flushSyl(ev.tick)
+  }
+  flushSyl(0)
+  commitLine()
+  for (let i = 0; i < flat.length - 1; i++) flat[i].endSec = flat[i + 1].startSec
+  for (const line of lines) line.endSec = line.syllables[line.syllables.length - 1].endSec
+  return { lines, syllables: flat, lastLyricTick }
 }
 
-function makeLine(syllables: MidiSyllable[]): MidiLine {
-  return {
-    text: syllables.map((s) => s.text).join(' '),
-    syllables,
-    startSec: syllables[0].startSec,
-    endSec: syllables[syllables.length - 1].endSec,
+/**
+ * Song length from the music itself. The last event of every track is a bad
+ * source: karaoke files ship marker/metadata tracks (and the odd stray note)
+ * that sit minutes or hours past the actual song. So use the last note, trim
+ * anything after a long silence, and cap the result.
+ */
+function computeDuration(raw: RawNote[], lastLyricTick: number, tickToSec: (tick: number) => number, lastTrackTick: number): number {
+  const starts: number[] = []
+  let noteEndTick = 0
+  for (const n of raw) {
+    if (n.startTick !== undefined) starts.push(n.startTick)
+    const end = n.endTick ?? n.startTick
+    if (end !== undefined) noteEndTick = Math.max(noteEndTick, end)
   }
+  starts.sort((a, b) => a - b)
+
+  let endTick = Math.max(noteEndTick, lastLyricTick)
+  for (let i = 1; i < starts.length; i++) {
+    if (tickToSec(starts[i]) - tickToSec(starts[i - 1]) > GAP_TRIM_SEC) {
+      endTick = starts[i - 1]
+      break
+    }
+  }
+
+  let sec = tickToSec(endTick)
+  if (!Number.isFinite(sec) || sec <= 0) sec = tickToSec(lastTrackTick)
+
+  // Notes running far past the last lyric means the timing is stretched or the
+  // tail is junk; the lyrics end where the song does.
+  const lyricSec = tickToSec(lastLyricTick)
+  if (lyricSec > 0 && sec > lyricSec * 2 + GAP_TRIM_SEC) sec = lyricSec + 15
+
+  if (sec > MAX_SONG_SEC) sec = MAX_SONG_SEC
+  return sec
 }
 
 function makeTickToSec(
