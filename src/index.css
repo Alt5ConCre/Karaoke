@@ -4,6 +4,41 @@
    Single stylesheet, plain CSS, no preprocessor.
    ========================================================================== */
 
+@font-face {
+  font-family: 'Radio Canada';
+  src: url('/fonts/RadioCanada-var.ttf') format('truetype-variations');
+  font-weight: 400 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Archivo Black';
+  src: url('/fonts/ArchivoBlack-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Anton';
+  src: url('/fonts/Anton-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Bungee';
+  src: url('/fonts/Bungee-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Lilita One';
+  src: url('/fonts/LilitaOne-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+
 :root {
   --bg: #08080f;
   --bg-elev: #10101d;
@@ -35,6 +70,17 @@
 
   --font: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
   --mono: ui-monospace, 'SFMono-Regular', 'Cascadia Code', Consolas, monospace;
+
+  /* Lyric styling (overridden per-user on .midi-player by lyricsStyle.ts). */
+  --lyric-font: 'Radio Canada', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --lyric-size: 1.35rem;
+  --lyric-done: #ffd54a;
+  --lyric-active: #ffffff;
+  --lyric-upcoming: #5b6472;
+  --lyric-outline: 0px;
+  --lyric-outline-color: #000000;
+  --lyric-shadow: 0px;
+  --lyric-shadow-color: #000000;
 
   --maxw: 1180px;
 
@@ -925,7 +971,8 @@ a {
 }
 
 .midi-player__line {
-  font-size: 1.35rem;
+  font-family: var(--lyric-font);
+  font-size: var(--lyric-size);
   line-height: 1.4;
   font-weight: 600;
   min-height: 1.4em;
@@ -934,6 +981,7 @@ a {
 }
 
 .midi-player__next {
+  font-family: var(--lyric-font);
   font-size: 0.95rem;
   line-height: 1.4;
   color: var(--text-dim);
@@ -943,16 +991,22 @@ a {
 }
 
 .midi-player__syl {
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--lyric-done);
+  -webkit-text-stroke: var(--lyric-outline) var(--lyric-outline-color);
+  text-shadow: 0 0 var(--lyric-shadow) var(--lyric-shadow-color);
   transition: color 120ms linear;
 }
 
+.midi-player__syl--done {
+  color: var(--lyric-done);
+}
+
 .midi-player__syl--on {
-  color: #fff;
+  color: var(--lyric-active);
 }
 
 .midi-player__syl--up {
-  color: rgba(255, 255, 255, 0.28);
+  color: var(--lyric-upcoming);
 }
 
 .midi-player__hint {

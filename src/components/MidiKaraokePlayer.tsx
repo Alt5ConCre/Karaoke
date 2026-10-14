@@ -1,10 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { ReactElement } from 'react'
+import type { CSSProperties, ReactElement } from 'react'
 import type { Song } from '../types.ts'
 import { parseMidiKaraoke } from '../lib/midi.ts'
 import type { MidiSong } from '../lib/midi.ts'
 import { KaraokeMidiPlayer } from '../lib/midiSynth.ts'
 import { BackgroundVideo } from './BackgroundVideo.tsx'
+import { fontStack } from '../lib/lyricFonts.ts'
+import { SIZE_REM } from '../lib/lyricsStyle.ts'
+import { useLyricsStyle } from '../lib/useLyricsStyle.ts'
+import { useSoundfontId } from '../lib/useSoundfonts.ts'
+import { loadBank } from '../lib/soundfonts.ts'
 
 interface MidiKaraokePlayerProps {
   /** Object URL of the local file, or the mediaUrl of a Songs/ library track. */
@@ -50,6 +55,23 @@ export function MidiKaraokePlayer({
   const onEndedRef = useRef(onEnded)
   onEndedRef.current = onEnded
 
+  const lyricsStyle = useLyricsStyle()
+  const soundfontId = useSoundfontId()
+  const soundfontIdRef = useRef(soundfontId)
+  soundfontIdRef.current = soundfontId
+
+  const lyricVars = {
+    '--lyric-font': fontStack(lyricsStyle.font),
+    '--lyric-size': SIZE_REM[lyricsStyle.size],
+    '--lyric-done': lyricsStyle.doneColor,
+    '--lyric-active': lyricsStyle.activeColor,
+    '--lyric-upcoming': lyricsStyle.upcomingColor,
+    '--lyric-outline': `${lyricsStyle.outlineWidth}px`,
+    '--lyric-outline-color': lyricsStyle.outlineColor,
+    '--lyric-shadow': `${lyricsStyle.shadowBlur}px`,
+    '--lyric-shadow-color': lyricsStyle.shadowColor,
+  } as CSSProperties
+
   useEffect(() => {
     let alive = true
     let player: KaraokeMidiPlayer | null = null
@@ -74,6 +96,9 @@ export function MidiKaraokePlayer({
         playerRef.current = player
         setMidi(parsed)
         setStatus('ready')
+        void loadBank(soundfontIdRef.current).then((bank) => {
+          if (alive && player) player.setBank(bank)
+        })
         if (autoPlay) player.play()
       })
       .catch((error: unknown) => {
@@ -102,6 +127,16 @@ export function MidiKaraokePlayer({
   useEffect(() => {
     playerRef.current?.setVolume(volume)
   }, [volume])
+
+  useEffect(() => {
+    let alive = true
+    void loadBank(soundfontId).then((bank) => {
+      if (alive) playerRef.current?.setBank(bank)
+    })
+    return () => {
+      alive = false
+    }
+  }, [soundfontId])
 
   const activeLine = useMemo(() => {
     if (!midi) return null
@@ -141,7 +176,7 @@ export function MidiKaraokePlayer({
   const language = midi && midi.language.trim() ? midi.language : songMeta.language
 
   return (
-    <div className={`midi-player midi-player--${variant}`}>
+    <div className={`midi-player midi-player--${variant}`} style={lyricVars}>
       {heading && <p className="midi-player__heading">{heading}</p>}
       <div className="midi-player__screen" aria-live="polite">
         <BackgroundVideo />
@@ -237,7 +272,11 @@ function renderLine(line: { syllables: { text: string; startSec: number; endSec:
           <span
             key={index}
             className={
-              active ? 'midi-player__syl midi-player__syl--on' : done ? 'midi-player__syl' : 'midi-player__syl midi-player__syl--up'
+              active
+                ? 'midi-player__syl midi-player__syl--on'
+                : done
+                  ? 'midi-player__syl midi-player__syl--done'
+                  : 'midi-player__syl midi-player__syl--up'
             }
           >
             {syllable.text}

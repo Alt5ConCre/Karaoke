@@ -1,0 +1,13 @@
+soundfont.sf2 — "TimGM6mb"
+----------------------------------------
+A small General MIDI SoundFont (about 6 MB, 136 presets) by Tim Brechbill,
+distributed with the GNU General Public License.
+
+Source: https://github.com/craffel/pretty-midi/blob/main/pretty_midi/TimGM6mb.sf2
+(upstream home: http://timidity.sourceforge.net/ — TimGM6mb is the bank bundled
+with the Timidity++ MIDI renderer.)
+
+License: GPL-2.0-or-later.
+
+Replacing it: any `.sf2` bank works. Name it `soundfont.sf2` and drop it in this
+folder, or add one at runtime from the SoundFont picker (stored on-device).

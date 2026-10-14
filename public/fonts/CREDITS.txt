@@ -1,0 +1,13 @@
+Bundled lyric fonts
+----------------------------------------
+All are licensed under the SIL Open Font License 1.1 (OFL), which allows
+bundling and redistribution.
+
+  RadioCanada-var.ttf    Radio Canada (variable) — default lyric font
+  ArchivoBlack-Regular.ttf  Archivo Black
+  Anton-Regular.ttf      Anton
+  Bungee-Regular.ttf     Bungee
+  LilitaOne-Regular.ttf  Lilita One
+
+Sources: https://github.com/google/fonts (ofl/ directory).
+OFL text: https://scripts.sil.org/OFL

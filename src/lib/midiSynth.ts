@@ -1,7 +1,9 @@
 /**
  * KaraokeMidiPlayer — turns a parsed `MidiSong` into audible music using only
- * the Web Audio API. No samples, no soundfonts, no network calls: every tone
- * is synthesised on the fly with oscillators and a shared white-noise buffer.
+ * the Web Audio API. Out of the box every tone is synthesised on the fly with
+ * oscillators and a shared white-noise buffer. When a SoundFont bank is
+ * supplied (`setBank`), notes are played back as sampled audio from it instead,
+ * falling back to the oscillators whenever a preset has no matching sample.
  *
  * The browser cannot play `.kar`/`.mid`/`.midi` natively, so this is the "play
  * engine" behind the MIDI karaoke player. Volume shaping is crude on purpose —
@@ -17,6 +19,7 @@
  */
 
 import type { MidiSong } from './midi.ts'
+import type { Sf2Bank, Sf2Voice } from './sf2.ts'
 
 type OscType = OscillatorType
 
@@ -77,6 +80,11 @@ export class KaraokeMidiPlayer {
   private playing = false
   private volume = 0.8
   private pumpTimer: ReturnType<typeof setInterval> | null = null
+
+  /** Optional sampled instrument bank; oscillator synth covers anything it lacks. */
+  private bank: Sf2Bank | null = null
+  /** Decoded PCM per sample index, built lazily and dropped when the bank changes. */
+  private sampleBuffers = new Map<number, AudioBuffer>()
 
   private song: MidiSong
 
@@ -175,6 +183,17 @@ export class KaraokeMidiPlayer {
     }
   }
 
+  /** Swap in (or clear) the sampled instrument bank. Decoded PCM is dropped. */
+  setBank(bank: Sf2Bank | null): void {
+    if (bank === this.bank) return
+    this.bank = bank
+    this.sampleBuffers.clear()
+  }
+
+  get hasBank(): boolean {
+    return this.bank !== null
+  }
+
   destroy(): void {
     this.stop()
     if (this.ctx) {
@@ -249,6 +268,10 @@ export class KaraokeMidiPlayer {
     const ctx = this.ctx
     const master = this.master
     if (!ctx || !master) return
+    if (this.bank) {
+      const voice = this.bank.pickVoice(program, key, velocity)
+      if (voice && this.playSample(nodeTime, key, velocity, dur, voice)) return
+    }
     const timbre = timbreForProgram(program)
     const peak = (velocity / 127) * 0.4
     const freq = NOTE_FREQ(key)
@@ -298,6 +321,69 @@ export class KaraokeMidiPlayer {
     }
   }
 
+  /** Decode one SoundFont sample to an AudioBuffer, cached per sample index. */
+  private sampleBuffer(index: number): AudioBuffer | null {
+    const ctx = this.ctx
+    const bank = this.bank
+    if (!ctx || !bank) return null
+    const cached = this.sampleBuffers.get(index)
+    if (cached) return cached
+    const sample = bank.samples[index]
+    if (!sample) return null
+    const frames = Math.max(sample.end - sample.start, 1)
+    const buffer = ctx.createBuffer(1, frames, sample.sampleRate)
+    const channel = buffer.getChannelData(0)
+    const pcm = bank.pcm
+    for (let i = 0; i < frames; i++) channel[i] = pcm[sample.start + i] / 32768
+    this.sampleBuffers.set(index, buffer)
+    return buffer
+  }
+
+  /** Play a matched SoundFont voice. Returns false when nothing could be built. */
+  private playSample(nodeTime: number, key: number, velocity: number, dur: number, voice: Sf2Voice): boolean {
+    const ctx = this.ctx
+    const master = this.master
+    const bank = this.bank
+    if (!ctx || !master || !bank) return false
+    const sample = bank.samples[voice.sampleIndex]
+    const buffer = this.sampleBuffer(voice.sampleIndex)
+    if (!sample || !buffer) return false
+
+    const src = ctx.createBufferSource()
+    src.buffer = buffer
+    src.playbackRate.value = Math.pow(2, (key - voice.rootKey + voice.tune) / 12)
+
+    const sampleDur = (voice.end - voice.start) / sample.sampleRate
+    if (voice.loop && dur > sampleDur * 0.98) {
+      src.loop = true
+      src.loopStart = (voice.loopStart - sample.start) / sample.sampleRate
+      src.loopEnd = (voice.loopEnd - sample.start) / sample.sampleRate
+    }
+
+    const peak = (velocity / 127) * 0.5 * Math.pow(10, -voice.attenuationCb / 200)
+    const attack = 0.006
+    const release = voice.loop ? 0.14 : 0.1
+    const end = nodeTime + Math.max(dur, attack + 0.02) + release
+    const gain = ctx.createGain()
+    gain.gain.setValueAtTime(0, nodeTime)
+    gain.gain.linearRampToValueAtTime(peak, nodeTime + attack)
+    gain.gain.setValueAtTime(peak, Math.max(nodeTime + attack + 0.001, end - release))
+    gain.gain.linearRampToValueAtTime(0, end)
+
+    const pan = ctx.createStereoPanner()
+    pan.pan.value = voice.pan
+    src.connect(gain)
+    gain.connect(pan)
+    pan.connect(master)
+
+    const offset = Math.max((voice.start - sample.start) / sample.sampleRate, 0)
+    src.start(nodeTime, offset)
+    const stopAt = end + 0.05
+    src.stop(stopAt)
+    this.scheduled.push({ node: src, stopAt })
+    return true
+  }
+
   private noiseBurst(nodeTime: number, dur: number, filterType: BiquadFilterType, filterFreq: number, peak: number): void {
     const ctx = this.ctx
     const master = this.master
@@ -338,6 +424,10 @@ export class KaraokeMidiPlayer {
 
   private scheduleDrum(nodeTime: number, key: number, velocity: number, dur: number): void {
     const v = velocity / 127
+    if (this.bank) {
+      const voice = this.bank.pickVoice(0, key, velocity, 128)
+      if (voice && this.playSample(nodeTime, key, velocity, dur, voice)) return
+    }
     switch (key) {
       case 35:
       case 36:
